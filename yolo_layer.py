@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from util import build_targets
+from util import CIoULoss, build_targets
 
 img_dim = (384, 512)
 
@@ -16,7 +16,7 @@ class YoloLayer(nn.Module):
         self.ignore_thres = 0.5
         self.lambda_coord = 1
 
-        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
+        self.ciou_loss = CIoULoss()  # Coordinate loss
         self.bce_loss = nn.BCELoss(reduction='mean')  # Confidence loss
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
@@ -70,18 +70,18 @@ class YoloLayer(nn.Module):
                 self.bce_loss = self.bce_loss.cuda()
                 self.ce_loss = self.ce_loss.cuda()
 
-            nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls = build_targets(
-                pred_boxes=pred_boxes.cpu().detach(),
-                pred_conf=pred_conf.cpu().detach(),
-                pred_classes=pred_class.cpu().detach(),
-                target=targets.cpu().detach(),
-                anchors=scaled_anchors.cpu().detach(),
-                num_anchors=nA,
-                num_classes=self.num_classes,
-                grid_size_y=nGy,
-                grid_size_x=nGx,
-                ignore_thres=self.ignore_thres,
-                img_dim=self.image_dim,
+            nGT, nCorrect, mask, conf_mask, tbox, tconf, tcls = build_targets(
+                pred_boxes = pred_boxes.cpu().detach(),
+                pred_conf = pred_conf.cpu().detach(),
+                pred_classes = pred_class.cpu().detach(),
+                target = targets.cpu().detach(),
+                anchors = scaled_anchors.cpu().detach(),
+                num_anchors = nA,
+                num_classes = self.num_classes,
+                grid_size_y = nGy,
+                grid_size_x = nGx,
+                ignore_thres = self.ignore_thres,
+                img_dim = self.image_dim,
             )
 
             nProposals = int((pred_conf > 0.5).sum().item())
@@ -93,10 +93,7 @@ class YoloLayer(nn.Module):
             conf_mask = conf_mask.type(ByteTensor).bool()
 
             # Handle target variables
-            tx = tx.type(FloatTensor)
-            ty = ty.type(FloatTensor)
-            tw = tw.type(FloatTensor)
-            th = th.type(FloatTensor)
+            tbox = tbox.type(FloatTensor)
             tconf = tconf.type(FloatTensor)
             tcls = tcls.type(LongTensor)
 
@@ -105,21 +102,16 @@ class YoloLayer(nn.Module):
             conf_mask_false = conf_mask ^ mask
 
             # Mask outputs to ignore non-existing objects
-            loss_x = self.mse_loss(x[mask], tx[mask])
-            loss_y = self.mse_loss(y[mask], ty[mask])
-            loss_w = self.mse_loss(w[mask], tw[mask])
-            loss_h = self.mse_loss(h[mask], th[mask])
-            loss_conf = 10*self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) + self.bce_loss(
-                pred_conf[conf_mask_true], tconf[conf_mask_true])
+            loss_box = self.ciou_loss(pred_boxes[mask], tbox[mask])
+            loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
+                        + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
             loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
-            loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
+
+            loss = loss_box + loss_conf + loss_cls
 
             return (
                 loss,
-                loss_x.item(),
-                loss_y.item(),
-                loss_w.item(),
-                loss_h.item(),
+                loss_box,
                 loss_conf.item(),
                 loss_cls.item(),
                 recall,

@@ -1,5 +1,4 @@
 import torch
-import math
 import numpy as np
 
 import glob
@@ -10,6 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as transforms
+from math import pi
 
 
 class ListDataset(Dataset):
@@ -140,10 +140,7 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, num_anch
     conf_mask = torch.ones(nB, nA, nGy, nGx)
 
     # Target values for x, y, w, h and confidence and class
-    tx = torch.zeros(nB, nA, nGy, nGx)
-    ty = torch.zeros(nB, nA, nGy, nGx)
-    tw = torch.zeros(nB, nA, nGy, nGx)
-    th = torch.zeros(nB, nA, nGy, nGx)
+    tbox = torch.zeros(nB, nA, nGy, nGx, 4)
     tconf = torch.ByteTensor(nB, nA, nGy, nGx).fill_(0)
     tcls = torch.ByteTensor(nB, nA, nGy, nGx).fill_(0)
 
@@ -186,22 +183,56 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, num_anch
             mask[b, best_n, gj, gi] = 1
             conf_mask[b, best_n, gj, gi] = 1
 
-            # Coordinates
-            tx[b, best_n, gj, gi] = gx - gi
-            ty[b, best_n, gj, gi] = gy - gj
-
-            # Width and height
-            tw[b, best_n, gj, gi] = math.log(gw / anchors[best_n][0] + 1e-16)
-            th[b, best_n, gj, gi] = math.log(gh / anchors[best_n][1] + 1e-16)
+            # Target box in grid coordinates
+            tbox[b, best_n, gj, gi, :] = gt_box[:]
 
             # One-hot encoding of label
             tconf[b, best_n, gj, gi] = 1
             tcls[b, best_n, gj, gi] = t_class
 
             # Calculate iou between ground truth and best matching prediction
-            iou = bbox_iou(gt_box, pred_box, x1y1x2y2=False)
+            iou = bbox_iou(gt_box, pred_box, x1y1x2y2 = False)
             score = pred_conf[b, best_n, gj, gi]
             if iou > 0.5 and score > 0.5 and t_class == pred_class:
                 nCorrect += 1
 
-    return nGT, nCorrect, mask, conf_mask, tx, ty, tw, th, tconf, tcls
+    return nGT, nCorrect, mask, conf_mask, tbox, tconf, tcls
+
+class CIoULoss(nn.Module):
+    def __init__(self):
+        super(CIoULoss, self).__init__()
+    
+    def forward(self, b1, b2):
+        # central point coordinates + width and height
+        b1_xc, b1_yc, b1_w, b1_h = b1[:, 0], b1[:, 1], b1[:, 2], b1[:, 3]
+        b2_xc, b2_yc, b2_w, b2_h = b2[:, 0], b2[:, 1], b2[:, 2], b2[:, 3]
+        
+        # corner point coordinates
+        b1_x1, b1_y1 = b1_xc - b1_w / 2, b1_yc - b1_h / 2
+        b1_x2, b1_y2 = b1_xc + b1_w / 2, b1_yc + b1_h / 2
+        b2_x1, b2_y1 = b2_xc - b2_w / 2, b2_yc - b2_h / 2
+        b2_x2, b2_y2 = b2_xc + b2_w / 2, b2_yc + b2_h / 2
+
+        # iou
+        iou = bbox_iou(b1, b2, x1y1x2y2=False)
+
+        # rho is the distance between the central points of the two boxes
+        rho_squared = (b2_xc - b1_xc) ** 2 + (b2_yc - b1_yc) ** 2
+        
+        # c is the diagonal length of the smallest enclosing box covering two boxes
+        x_top_left = torch.minimum(b1_x1, b2_x1)
+        y_top_left = torch.minimum(b1_y1, b2_y1)
+        x_bottom_right = torch.maximum(b1_x2, b2_x2)
+        y_bottom_right = torch.maximum(b1_y2, b2_y2)
+        c_squared = (x_bottom_right - x_top_left) ** 2 + (y_bottom_right - y_top_left) ** 2
+
+        # v measures the consistency of aspect ratio
+        v = 4 / (pi ** 2) * (torch.arctan(b1_w / b1_h) - torch.arctan(b2_w / b2_h)) ** 2
+
+        # alpha is a positive trade-off parameter
+        alpha = v / (1 - iou + v)
+
+        # CIoU loss function
+        loss = 1 - iou + rho_squared / c_squared + alpha * v
+
+        return torch.mean(loss)

@@ -1,4 +1,3 @@
-from tkinter import E
 import torch
 from torch import nn
 import torch.nn.functional as F
@@ -296,16 +295,16 @@ class YoloHead(nn.Module):
 
         # anchors for yolo layers: i.e. if we have 9 anchor boxes, we split them up into 3 arrays of 3 anchor boxes
         assert(len(anchors) % 3 == 0)
-        anchor_step = len(anchors) // 3
-        anchors1 = anchors[anchor_step * 0 : anchor_step * 1]
-        anchors2 = anchors[anchor_step * 1 : anchor_step * 2]
-        anchors3 = anchors[anchor_step * 2 : anchor_step * 3]
+        step = len(anchors) // 3
+        anchors_sml = anchors[step * 0 : step * 1]
+        anchors_med = anchors[step * 1 : step * 2]
+        anchors_lrg = anchors[step * 2 : step * 3]
 
 
         self.conv1 = ConvBnActivation(128, 256, 3, 1, "leaky")
         self.conv2 = nn.Conv2d(256, num_out_channels, 1)
 
-        self.yolo1 = YoloLayer(anchors1, num_classes)
+        self.yolo1 = YoloLayer(anchors_sml, num_classes)
 
         self.conv3 = ConvBnActivation(128, 256, 3, 2, "leaky")
 
@@ -317,7 +316,7 @@ class YoloHead(nn.Module):
         self.conv9 = ConvBnActivation(256, 512, 3, 1, "leaky")
         self.conv10 = nn.Conv2d(512, num_out_channels, 1)
 
-        self.yolo2 = YoloLayer(anchors2, num_classes)
+        self.yolo2 = YoloLayer(anchors_med, num_classes)
 
         self.conv11 = ConvBnActivation(256, 512, 3, 2, "leaky")
 
@@ -329,7 +328,7 @@ class YoloHead(nn.Module):
         self.conv17 = ConvBnActivation(512, 1024, 3, 1, "leaky")
         self.conv18 = nn.Conv2d(1024, num_out_channels, 1)
 
-        self.yolo3 = YoloLayer(anchors3, num_classes)
+        self.yolo3 = YoloLayer(anchors_lrg, num_classes)
 
     def forward(self, input1, input2, input3, targets = None):
         x1 = self.conv1(input1)
@@ -359,10 +358,11 @@ class YoloHead(nn.Module):
 
         if targets is not None:
             losses_1 = self.yolo1(x2, targets)
-            losses_2 = self.yolo1(x10, targets)
-            losses_3 = self.yolo1(x18, targets)
-
-            return [losses_1, losses_2, losses_3]
+            losses_2 = self.yolo2(x10, targets)
+            losses_3 = self.yolo3(x18, targets)
+            total_loss = losses_1[0] + losses_2[0] + losses_3[0]
+            
+            return total_loss
         else:
             y1 = self.yolo1(x2)
             y2 = self.yolo2(x10)
@@ -375,7 +375,7 @@ class Yolo(nn.Module):
     def __init__(self, anchors, num_classes):
         super(Yolo, self).__init__()
 
-        num_out_channels = (4 + 1 + num_classes) * 3 # 3 anchor boxes for each stage
+        num_out_channels = (4 + 1 + num_classes) * (len(anchors) // 3)
 
         self.downsample1 = DownSample1()
         self.downsample2 = DownSample2()
@@ -389,12 +389,19 @@ class Yolo(nn.Module):
 
     def forward(self, x, targets = None):
         d1 = self.downsample1(x)
+        print("Completed downsample1")
         d2 = self.downsample2(d1)
+        print("Completed downsample2")
         d3 = self.downsample3(d2)
+        print("Completed downsample3")
         d4 = self.downsample4(d3)
+        print("Completed downsample4")
         d5 = self.downsample5(d4)
+        print("Completed downsample5")
 
         x20, x13, x6 = self.neck(d5, d4, d3)
+        print("Completed neck")
 
-        output = self.head(x20, x13, x6)
+        output = self.head(x20, x13, x6, targets)
+        print("Completed head")
         return output
