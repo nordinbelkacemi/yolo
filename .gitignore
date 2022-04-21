@@ -3,3 +3,5 @@ architechture.pdf
 Finetune/
 .DS_Store
 yolo-test.ipynb
+resize-test.ipynb
+main.py

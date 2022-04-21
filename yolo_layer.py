@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from util import CIoULoss, build_targets
 
-img_dim = (384, 512)
+img_dim = (416, 416)
 
 class YoloLayer(nn.Module):
     """Detection layer"""
@@ -86,7 +86,7 @@ class YoloLayer(nn.Module):
 
             nProposals = int((pred_conf > 0.5).sum().item())
             recall = float(nCorrect / nGT) if nGT else 1
-            precision = float(nCorrect / nProposals)
+            precision = float(nCorrect / nProposals) if nProposals != 0 else None
 
             # Handle masks
             mask = mask.type(ByteTensor).bool()
