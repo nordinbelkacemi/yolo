@@ -110,7 +110,7 @@ class YoloLayer(nn.Module):
             loss = loss_box + loss_conf + loss_cls
 
             return (
-                loss.item(),
+                loss,
                 loss_box.item(),
                 loss_conf.item(),
                 loss_cls.item(),
