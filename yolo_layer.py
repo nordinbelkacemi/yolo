@@ -66,7 +66,7 @@ class YoloLayer(nn.Module):
         # Training
         if targets is not None:
             if x.is_cuda:
-                self.mse_loss = self.mse_loss.cuda()
+                self.ciou_loss = self.ciou_loss.cuda()
                 self.bce_loss = self.bce_loss.cuda()
                 self.ce_loss = self.ce_loss.cuda()
 
