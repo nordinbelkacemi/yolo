@@ -389,19 +389,12 @@ class Yolo(nn.Module):
 
     def forward(self, x, targets = None):
         d1 = self.downsample1(x)
-        print("Completed downsample1")
         d2 = self.downsample2(d1)
-        print("Completed downsample2")
         d3 = self.downsample3(d2)
-        print("Completed downsample3")
         d4 = self.downsample4(d3)
-        print("Completed downsample4")
         d5 = self.downsample5(d4)
-        print("Completed downsample5")
 
         x20, x13, x6 = self.neck(d5, d4, d3)
-        print("Completed neck")
 
         output = self.head(x20, x13, x6, targets)
-        print("Completed head")
         return output
