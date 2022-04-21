@@ -362,7 +362,12 @@ class YoloHead(nn.Module):
             losses_3 = self.yolo3(x18, targets)
             total_loss = losses_1[0] + losses_2[0] + losses_3[0]
             
-            return total_loss
+            return (
+                total_loss,
+                losses_1,
+                losses_2,
+                losses_3
+            )
         else:
             y1 = self.yolo1(x2)
             y2 = self.yolo2(x10)
