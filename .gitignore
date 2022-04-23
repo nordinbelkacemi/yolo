@@ -5,3 +5,4 @@ Finetune/
 yolo-test.ipynb
 resize-test.ipynb
 main.py
+*.pt
