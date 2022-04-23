@@ -1,16 +1,14 @@
 import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
 import numpy as np
-
 import glob
 import os
-import numpy as np
-import torch
-import torch.nn as nn
+
 from torch.utils.data import Dataset
 from PIL import Image
-import torchvision.transforms as transforms
-from math import pi
 from IPython.display import HTML
+from math import pi
 
 
 class ListDataset(Dataset):
@@ -271,3 +269,62 @@ def progress(value, max=100):
             {value}
         </progress>
     """.format(value=value, max=max))
+
+def non_max_suppression(prediction, num_classes, conf_thres = 0.5, nms_thres = 0.4):
+    # From (center x, center y, width, height) to (x1, y1, x2, y2)
+    box_corner = prediction.new(prediction.shape)
+    box_corner[:, :, 0] = prediction[:, :, 0] - prediction[:, :, 2] / 2
+    box_corner[:, :, 1] = prediction[:, :, 1] - prediction[:, :, 3] / 2
+    box_corner[:, :, 2] = prediction[:, :, 0] + prediction[:, :, 2] / 2
+    box_corner[:, :, 3] = prediction[:, :, 1] + prediction[:, :, 3] / 2
+    prediction[:, :, :4] = box_corner[:, :, :4]
+
+    batch_size = len(prediction)
+    output = [None for _ in range(batch_size)]
+    # Run non max suppression algorithm for each image
+    for image_idx, image_pred in enumerate(prediction):
+        # Filter out confidence scores below threshold
+        conf_mask = (image_pred[:, 4] >= conf_thres).squeeze()
+        image_pred = image_pred[conf_mask]
+
+        # If none remain, process next image
+        if len(image_pred) == 0:
+            continue
+        
+        # Get score and class with the highest confidence
+        class_conf, class_pred = torch.max(image_pred[:, 5:], dim = 1, keepdim = True)
+        # Detections ordered as (x1, y1, x2, y2, obj_conf, class_conf, class_pred)
+        detections = torch.cat((image_pred[:, :5], class_conf.float(), class_pred.float()), dim = 1)
+
+        # unique_labels is a 1 dimensional tensor containing the unique classes predicted:
+        unique_labels = detections[:, -1].cpu().unique()
+        if prediction.is_cuda:
+            unique_labels = unique_labels.cuda()
+        
+        # Iterate through all predicted classes
+        for c in unique_labels:
+            detections_class = detections[detections[:, -1] == c]
+            # Sort the detections by maximum objectness score
+            _, conf_sort_idx = torch.sort(detections_class[:, 4], descending = True)
+            detections_class = detections_class[conf_sort_idx]
+
+            # Perform non max suppression
+            max_detections = []
+            while len(detections_class) != 0:
+                # Get detection with the highest confidence
+                max_detections.append(detections_class[0].unsqueeze(0))
+                # Stop if we're at the last detection
+                if len(detections_class) == 1:
+                    break
+                # Get the IOUs for all other boxes with lower confidence
+                ious = bbox_iou(max_detections[-1], detections_class[1:])
+                # Remove detections with IoU >= NMS threshold
+                detections_class = detections_class[1:][ious < nms_thres]
+            
+            max_detections = torch.cat(max_detections)
+            # Add max detections to outputs
+            output[image_idx] = (
+                max_detections if output[image_idx] is None else torch.cat((output[image_idx], max_detections))
+            )
+
+    return output

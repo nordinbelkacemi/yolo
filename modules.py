@@ -2,6 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from yolo_layer import YoloLayer
+from util import get_pred_boxes
+
 
 # ANCHORS = [
 #     [12, 16],
@@ -105,7 +107,7 @@ class DownSample1(nn.Module):
         r = self.res(x4)
         x5 = self.conv5(r)
 
-        x5 = torch.cat([x5, x3], dim = 1)
+        x5 = torch.cat((x5, x3), dim = 1)
         x6 = self.conv6(x5)
         return x6
 
@@ -129,7 +131,7 @@ class DownSample2(nn.Module):
         r = self.res(x3)
         x4 = self.conv4(r)
 
-        x4 = torch.cat([x4, x2], dim = 1)
+        x4 = torch.cat((x4, x2), dim = 1)
         x5 = self.conv5(x4)
         return x5
 
@@ -153,7 +155,7 @@ class DownSample3(nn.Module):
         r = self.res(x3)
         x4 = self.conv4(r)
 
-        x4 = torch.cat([x4, x2], dim = 1)
+        x4 = torch.cat((x4, x2), dim = 1)
         x5 = self.conv5(x4)
         return x5
 
@@ -177,7 +179,7 @@ class DownSample4(nn.Module):
         r = self.res(x3)
         x4 = self.conv4(r)
 
-        x4 = torch.cat([x4, x2], dim = 1)
+        x4 = torch.cat((x4, x2), dim = 1)
         x5 = self.conv5(x4)
         return x5
 
@@ -202,7 +204,7 @@ class DownSample5(nn.Module):
         r = self.res(x3)
         x4 = self.conv4(r)
 
-        x4 = torch.cat([x4, x2], dim = 1)
+        x4 = torch.cat((x4, x2), dim = 1)
         x5 = self.conv5(x4)
         return x5
 
@@ -255,7 +257,7 @@ class Neck(nn.Module):
         m1 = self.maxpool1(x3)
         m2 = self.maxpool2(x3)
         m3 = self.maxpool3(x3)
-        spp = torch.cat([m3, m2, m1, x3], dim = 1)
+        spp = torch.cat((m3, m2, m1, x3), dim = 1)
 
         x4 = self.conv4(spp)
         x5 = self.conv5(x4)
@@ -266,7 +268,7 @@ class Neck(nn.Module):
         up = self.upsample1(x7, downsample4.size())
 
         x8 = self.conv8(downsample4)
-        x8 = torch.cat([x8, up], dim = 1)
+        x8 = torch.cat((x8, up), dim = 1)
 
         x9 = self.conv9(x8)
         x10 = self.conv10(x9)
@@ -278,7 +280,7 @@ class Neck(nn.Module):
         up = self.upsample2(x14, downsample3.size())
 
         x15 = self.conv15(downsample3)
-        x15 = torch.cat([x15, up], dim = 1)
+        x15 = torch.cat((x15, up), dim = 1)
 
         x16 = self.conv16(x15)
         x17 = self.conv17(x16)
@@ -335,7 +337,7 @@ class YoloHead(nn.Module):
         x2 = self.conv2(x1)
 
         x3 = self.conv3(input1)
-        x3 = torch.cat([x3, input2], dim = 1)
+        x3 = torch.cat((x3, input2), dim = 1)
 
         x4 = self.conv4(x3)
         x5 = self.conv5(x4)
@@ -346,7 +348,7 @@ class YoloHead(nn.Module):
         x10 = self.conv10(x9)
 
         x11 = self.conv11(x8)
-        x11 = torch.cat([x11, input3], dim = 1)
+        x11 = torch.cat((x11, input3), dim = 1)
 
         x12 = self.conv12(x11)
         x13 = self.conv13(x12)
@@ -373,14 +375,14 @@ class YoloHead(nn.Module):
             y2 = self.yolo2(x10)
             y3 = self.yolo3(x18)
 
-            return [y1, y2, y3]
+            return torch.cat((y1, y2, y3), dim = 1)
 
 
 class Yolo(nn.Module):
     def __init__(self, anchors, num_classes):
         super(Yolo, self).__init__()
 
-        num_out_channels = (4 + 1 + num_classes) * (len(anchors) // 3)
+        num_out_channels = (5 + num_classes) * (len(anchors) // 3)
 
         self.downsample1 = DownSample1()
         self.downsample2 = DownSample2()
