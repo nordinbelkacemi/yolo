@@ -2,7 +2,6 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from yolo_layer import YoloLayer
-from util import get_pred_boxes
 
 
 # ANCHORS = [
