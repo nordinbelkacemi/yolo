@@ -10,6 +10,7 @@ from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as transforms
 from math import pi
+from IPython.display import HTML
 
 
 class ListDataset(Dataset):
@@ -236,3 +237,37 @@ class CIoULoss(nn.Module):
         loss = 1 - iou + rho_squared / c_squared + alpha * v
 
         return torch.mean(loss)
+
+def print_losses(dataloader, all_losses, idx):
+    """
+    Args:
+        all_losses: numpy array of all the losses. Its shape is (3, n_loss),
+        where n_loss is the number of loss metrics that the YoloLayer returns
+        when training.
+        
+        idx: an integer used to select the detection stage.
+    """
+    stage_losses = all_losses[idx]
+    print("\tLosses %d: ciou %f, conf %f, cls %f, total %f, recall: %.5f, precision: %.5f"
+        % (
+            idx + 1,
+            stage_losses[1] / float(len(dataloader)),
+            stage_losses[2] / float(len(dataloader)),
+            stage_losses[3] / float(len(dataloader)),
+            stage_losses[0] / float(len(dataloader)),
+            stage_losses[4] / float(len(dataloader)),
+            stage_losses[5] / float(len(dataloader))
+        )
+    )
+
+
+def progress(value, max=100):
+    return HTML("""
+        <progress
+            value='{value}'
+            max='{max}',
+            style='width: 100%'
+        >
+            {value}
+        </progress>
+    """.format(value=value, max=max))
