@@ -327,11 +327,4 @@ def non_max_suppression(prediction, num_classes, conf_thres = 0.5, nms_thres = 0
                 max_detections if output[image_idx] is None else torch.cat((output[image_idx], max_detections))
             )
 
-    formatted_output = output.new(output.shape)
-
-    formatted_output[:, :, 1] = output[:, :, 0] + (output[:, :, 2] - output[:, :, 0] / 2)
-    formatted_output[:, :, 2] = output[:, :, 1] + (output[:, :, 3] - output[:, :, 1] / 2)
-    formatted_output[:, :, 3] = output[:, :, 2] - output[:, :, 0]
-    formatted_output[:, :, 4] = output[:, :, 3] - output[:, :, 1]
-    formatted_output[:, :, 0] = output[:, :, -1]
-    return formatted_output
+    return output
