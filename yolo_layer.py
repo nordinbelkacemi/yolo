@@ -53,7 +53,7 @@ class YoloLayer(nn.Module):
             [1, 1, nGy, nGx]).type(FloatTensor)
 
         scaled_anchors = FloatTensor(
-            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
+            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors[self.anchor_mask[0]: self.anchor_mask[-1] + 1]])
         anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1))
         anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1))
 
