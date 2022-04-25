@@ -10,27 +10,29 @@ from util import non_max_suppression
 # num_classes = 4
 # anchors = [[16, 8], [23, 103], [28, 23], [56, 47], [96, 123], [157, 248]]
 
-def run_demo(img_path, label_path, num_classes, anchors):
+def run_demo(img_path, label_path, num_classes, anchors, using_cuda, saved_model_params_path = None):
     # read PIL image, convert it to RGB, then into a pytorch tensor
-    img = (transforms.ToTensor())(Image.open("Finetune/test/181.png").convert('RGB'))
+    img = (transforms.ToTensor())(Image.open(img_path).convert('RGB'))
 
     # read label from text, then write the data into a 50 by 5 pytorch tensor
     label = np.loadtxt(label_path).reshape(-1, 5)
     label[:, 1], label[:, 3] = label[:, 1] * 512, label[:, 3] * 512
     label[:, 2], label[:, 4] = label[:, 2] * 384, label[:, 4] * 384
-    # filled_labels = np.zeros((50, 5))
-    # if label is not None:
-    #     filled_labels[range(len(label))[:50]] = label[:50]
-    #     filled_labels = torch.from_numpy(filled_labels)
 
     # model
     model = Yolo(anchors, num_classes)
+    if saved_model_params_path is not None:
+        model.load_state_dict(torch.load(saved_model_params_path))
+    model.eval()
 
     # prediction
     input = img.unsqueeze(0)
+    if using_cuda:
+        input = input.cuda()
     detections = model(input)
     detections = non_max_suppression(detections, 4)
 
-    print(detections)
+    # printing
+    print(detections[0])
     print(label)
 
