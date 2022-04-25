@@ -2,14 +2,14 @@ import torch
 from torch import nn
 from util import CIoULoss, build_targets
 
-img_dim = (416, 416)
+img_dim = (384, 512)
 
 class YoloLayer(nn.Module):
     """Detection layer"""
-    def __init__(self, anchors, num_classes):
+    def __init__(self, anchors, anchor_mask, num_classes):
         super(YoloLayer, self).__init__()
         self.anchors = anchors
-        self.num_anchors = len(anchors)
+        self.num_sub_anchors = len(anchor_mask)
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
         self.image_dim = img_dim
@@ -21,7 +21,7 @@ class YoloLayer(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
     def forward(self, x, targets = None):
-        nA = self.num_anchors
+        nA = self.num_sub_anchors
         nB = x.size(0)
         nGy = x.size(2)
         nGx = x.size(3)
@@ -76,7 +76,7 @@ class YoloLayer(nn.Module):
                 pred_classes = pred_class.cpu().detach(),
                 target = targets.cpu().detach(),
                 anchors = scaled_anchors.cpu().detach(),
-                num_anchors = nA,
+                anchor_mask = nA,
                 num_classes = self.num_classes,
                 grid_size_y = nGy,
                 grid_size_x = nGx,
@@ -123,7 +123,7 @@ class YoloLayer(nn.Module):
             output = torch.cat((
                 pred_boxes.view(nB, -1, 4) * stride,
                 pred_conf.view(nB, -1, 1),
-                pred_class.view(nB, -1, self.num_classes),
+                pred_class.view(nB, -1, self.num_classes)
             ), -1)
 
         return output

@@ -2,65 +2,9 @@ import torch
 import torch.nn as nn
 import torchvision.transforms as transforms
 import numpy as np
-import glob
-import os
-
-from torch.utils.data import Dataset
-from PIL import Image
 from IPython.display import HTML
 from math import pi
 
-
-class ListDataset(Dataset):
-    def __init__(self, list_path, img_size=(384, 512)):
-        self.img_files = [list_path +
-                          img for img in glob.glob1(list_path, "*.png")]
-        self.label_files = [path.replace('images', 'labels').replace(
-            '.png', '.txt').replace('.jpg', '.txt') for path in self.img_files]
-        self.img_shape = img_size
-        self.transform = transforms.Compose([
-            transforms.Resize(img_size),
-            transforms.ToTensor(),
-        ])
-
-    def __getitem__(self, index):
-        """
-        Returns the tuple (img_path, input_img, filled_labels)
-            - img_path: path to the image
-            - input_img: the image itself as a pytorch tensor
-            - filled_labels: a pytorch tensor (with shape (50, 5)) of labels 
-        """
-
-        #---------
-        #  Image
-        #---------
-
-        img_path = self.img_files[index % len(self.img_files)].rstrip()
-        img = Image.open(img_path).convert('RGB')
-
-        input_img = self.transform(img)
-
-        #---------
-        #  Label
-        #---------
-
-        label_path = self.label_files[index % len(self.img_files)].rstrip()
-
-        labels = None
-        if os.path.exists(label_path):
-            labels = np.loadtxt(label_path).reshape(-1, 5)
-
-        # Fill matrix
-        filled_labels = np.zeros((50, 5))
-
-        if labels is not None:
-            filled_labels[range(len(labels))[:50]] = labels[:50]
-        filled_labels = torch.from_numpy(filled_labels)
-
-        return img_path, input_img, filled_labels
-
-    def __len__(self):
-        return len(self.img_files)
 
 def bbox_iou(box1, box2, x1y1x2y2=True):
     """
@@ -110,7 +54,7 @@ def get_anchor_ious(w, h, anchors):
     return bbox_iou(gt_box, anchor_shapes)
 
 
-def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, num_anchors, num_classes, grid_size_y, grid_size_x, ignore_thres, img_dim):
+def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, num_classes, grid_size_y, grid_size_x, ignore_thres, img_dim):
     """
     pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
@@ -128,7 +72,7 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, num_anch
     #     -> output: torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 6, 12, 16]) torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 50, 5]) torch.Size([6, 2]) 6 4 12 16 0.5 (384, 512)
 
     nB = target.size(0)  # batch_size
-    nA = num_anchors
+    nA = len(anchor_mask)
     nC = num_classes
     nGx = grid_size_x
     nGy = grid_size_y
@@ -165,11 +109,20 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, num_anch
             # Get IoU values between target and anchors
             anch_ious = get_anchor_ious(gw, gh, anchors)
 
-            # Where the overlap is larger than threshold set conf_mask to zero (ignore)
-            conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
+            # Slice anch_ious according to the anchor_mask given
+            mask_start, mask_end = anchor_mask[0], anchor_mask[-1]
+            sub_anch_ious = anch_ious[mask_start:mask_end + 1]
 
-            # Find the best matching anchor box
+            # Find the best matching anchor box and ignore if it is not in the anchor_mask
             best_n = np.argmax(anch_ious)
+            if best_n not in anchor_mask:
+                nGT -= 1
+                continue
+            else:
+                best_n = best_n % nA
+
+            # Where the overlap is larger than threshold set conf_mask to zero (ignore)
+            conf_mask[b, sub_anch_ious > ignore_thres, gj, gi] = 0
 
             # Create ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)
