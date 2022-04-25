@@ -1,11 +1,3 @@
-import torch
-import torchvision.transforms as transforms
-import numpy as np
-from PIL import Image
-from modules import Yolo
-from util import non_max_suppression
-import cv2
-from matplotlib import pyplot as plt
 
 # img_path = "Finetune/test/271.png"
 # label_path = "Finetune/test/271.txt"
@@ -16,6 +8,14 @@ from matplotlib import pyplot as plt
 
 
 
+# import torch
+# import torchvision.transforms as transforms
+# import numpy as np
+# from PIL import Image
+# from modules import Yolo
+# from util import non_max_suppression
+# import cv2
+# from matplotlib import pyplot as plt
 
 # def run_demo(img_path, label_path, num_classes, anchors, using_cuda, saved_model_params_path = None):
 #     # read PIL image, convert it to RGB, then into a pytorch tensor

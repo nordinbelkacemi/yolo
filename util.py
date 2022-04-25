@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torchvision.transforms as transforms
 import numpy as np
 from IPython.display import HTML
 from math import pi

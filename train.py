@@ -1,5 +1,4 @@
 import torch
-from dataset import ListDataset
 from util import progress, print_losses
 from modules import Yolo
 import numpy as np
