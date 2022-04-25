@@ -9,6 +9,7 @@ class YoloLayer(nn.Module):
     def __init__(self, anchors, anchor_mask, num_classes):
         super(YoloLayer, self).__init__()
         self.anchors = anchors
+        self.anchor_mask = anchor_mask
         self.num_sub_anchors = len(anchor_mask)
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
@@ -76,7 +77,7 @@ class YoloLayer(nn.Module):
                 pred_classes = pred_class.cpu().detach(),
                 target = targets.cpu().detach(),
                 anchors = scaled_anchors.cpu().detach(),
-                anchor_mask = nA,
+                anchor_mask = self.anchor_mask,
                 num_classes = self.num_classes,
                 grid_size_y = nGy,
                 grid_size_x = nGx,
