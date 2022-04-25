@@ -334,4 +334,4 @@ def non_max_suppression(prediction, num_classes, conf_thres = 0.5, nms_thres = 0
     formatted_output[:, :, 3] = output[:, :, 2] - output[:, :, 0]
     formatted_output[:, :, 4] = output[:, :, 3] - output[:, :, 1]
     formatted_output[:, :, 0] = output[:, :, -1]
-    return output
+    return formatted_output
