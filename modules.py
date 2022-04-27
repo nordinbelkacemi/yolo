@@ -399,8 +399,12 @@ class Yolo(nn.Module):
         d3 = self.downsample3(d2)
         d4 = self.downsample4(d3)
         d5 = self.downsample5(d4)
+        print("downsamples done")
 
         x20, x13, x6 = self.neck(d5, d4, d3)
+        print("neck done")
 
         output = self.head(x20, x13, x6, targets)
+        print("head done")
+        print("completed a batch.")
         return output

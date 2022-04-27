@@ -35,7 +35,9 @@ def train(model, dataloader, using_cuda, num_epochs = 10):
             optimizer.step()
 
             all_losses_sum += torch.Tensor(all_losses[:][1:]).cpu().detach().numpy()
-            bar.update(progress(i + 1, len(dataloader)))
+            
+            if bar is not None:
+                bar.update(progress(i + 1, len(dataloader)))
 
         print("[ Epoch %d/%d ]" % (epoch + 1, num_epochs))
         for i in range(3):

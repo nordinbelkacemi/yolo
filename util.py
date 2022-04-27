@@ -2,14 +2,13 @@ import torch
 import torch.nn as nn
 import numpy as np
 from IPython.display import HTML
-from math import pi
+from math import pi, log
 
 
 def bbox_iou(box1, box2, x1y1x2y2 = True):
     """
     Returns the IoU of two bounding boxes
     """
-    print("Hello")
     if not x1y1x2y2:
         # Transform from center and width to exact coordinates
         b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
@@ -54,7 +53,7 @@ def get_anchor_ious(w, h, anchors):
     return bbox_iou(gt_box, anchor_shapes)
 
 
-def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, num_classes, grid_size_y, grid_size_x, ignore_thres):
+def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, grid_size_y, grid_size_x, ignore_thres):
     """
     pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
@@ -73,7 +72,6 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_m
 
     nB = target.size(0)  # batch_size
     nA = len(anchor_mask)
-    nC = num_classes
     nGx = grid_size_x
     nGy = grid_size_y
 
@@ -135,8 +133,11 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_m
             mask[b, best_n, gj, gi] = 1
             conf_mask[b, best_n, gj, gi] = 1
 
-            # Target box in grid coordinates
-            tbox[b, best_n, gj, gi, :] = gt_box[:]
+            # x and y coordinates + width and height
+            tbox[b, best_n, gj, gi, 0] = gx - gi
+            tbox[b, best_n, gj, gi, 1] = gy - gj
+            tbox[b, best_n, gj, gi, 2] = log(gw / anchors[best_n][0] + 1e-16)
+            tbox[b, best_n, gj, gi, 3] = log(gh / anchors[best_n][1] + 1e-16)
 
             # One-hot encoding of label
             tconf[b, best_n, gj, gi] = 1
@@ -166,7 +167,7 @@ class CIoULoss(nn.Module):
         b2_x2, b2_y2 = b2_xc + b2_w / 2, b2_yc + b2_h / 2
 
         # iou
-        iou = bbox_iou(b1, b2, x1y1x2y2=False)
+        iou = bbox_iou(b1, b2, x1y1x2y2 = False)
 
         # rho is the distance between the central points of the two boxes
         rho_squared = (b2_xc - b1_xc) ** 2 + (b2_yc - b1_yc) ** 2

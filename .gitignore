@@ -6,3 +6,5 @@ yolo-test.ipynb
 resize-test.ipynb
 main.py
 *.pt
+demo_train.py
+demo_eval.py

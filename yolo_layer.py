@@ -42,6 +42,12 @@ class YoloLayer(nn.Module):
         y = torch.sigmoid(prediction[..., 1])  # Center y
         w = prediction[..., 2]  # Width
         h = prediction[..., 3]  # Height
+        pred_box = torch.cat((
+            x.unsqueeze(-1),
+            y.unsqueeze(-1),
+            w.unsqueeze(-1),
+            h.unsqueeze(-1)
+        ), dim = -1)
         pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
         pred_class = prediction[..., 5:]  # Class
 
@@ -77,11 +83,9 @@ class YoloLayer(nn.Module):
                 target = targets.cpu().detach(),
                 anchors = scaled_anchors.cpu().detach(),
                 anchor_mask = self.anchor_mask,
-                num_classes = self.num_classes,
                 grid_size_y = nGy,
                 grid_size_x = nGx,
                 ignore_thres = self.ignore_thres,
-                img_dim = self.image_dim,
             )
 
             nProposals = int((pred_conf > 0.5).sum().item())
@@ -102,7 +106,7 @@ class YoloLayer(nn.Module):
             conf_mask_false = conf_mask ^ mask
 
             # Mask outputs to ignore non-existing objects
-            loss_box = self.ciou_loss(pred_boxes[mask], tbox[mask])
+            loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
             loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
                         + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
             loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
