@@ -9,6 +9,7 @@ def bbox_iou(box1, box2, x1y1x2y2 = True):
     """
     Returns the IoU of two bounding boxes
     """
+    print("Hello")
     if not x1y1x2y2:
         # Transform from center and width to exact coordinates
         b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
@@ -53,7 +54,7 @@ def get_anchor_ious(w, h, anchors):
     return bbox_iou(gt_box, anchor_shapes)
 
 
-def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, num_classes, grid_size_y, grid_size_x, ignore_thres, img_dim):
+def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, num_classes, grid_size_y, grid_size_x, ignore_thres):
     """
     pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
