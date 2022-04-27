@@ -13,7 +13,7 @@ class YoloLayer(nn.Module):
         self.num_sub_anchors = len(anchor_mask)
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
-        self.image_dim = img_dim
+        self.image_dim = img_dim # (H, W)
         self.ignore_thres = 0.5
         self.lambda_coord = 1
 
@@ -35,8 +35,7 @@ class YoloLayer(nn.Module):
         ByteTensor = torch.cuda.ByteTensor if x.is_cuda else torch.ByteTensor
 
         # Reshape x: [batchSize x nGy x nGx x numAnchors*(5+numClass)] -> [batchSize x numAnchors x nGy x nGx x (5+numClass)]
-        prediction = x.view(nB, nA, self.bbox_attrs, nGy,
-                            nGx).permute(0, 1, 3, 4, 2).contiguous()
+        prediction = x.view(nB, nA, self.bbox_attrs, nGy, nGx).permute(0, 1, 3, 4, 2).contiguous()
 
         # Get outputs
         x = torch.sigmoid(prediction[..., 0])  # Center x
@@ -126,5 +125,9 @@ class YoloLayer(nn.Module):
                 pred_conf.view(nB, -1, 1),
                 pred_class.view(nB, -1, self.num_classes)
             ), -1)
+
+            w = output[0, 0, 2].item() - output[0, 0, 0].item()
+            h = output[0, 0, 3].item() - output[0, 0, 1].item()
+            print(w, h)
 
         return output

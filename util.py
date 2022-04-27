@@ -5,7 +5,7 @@ from IPython.display import HTML
 from math import pi
 
 
-def bbox_iou(box1, box2, x1y1x2y2=True):
+def bbox_iou(box1, box2, x1y1x2y2 = True):
     """
     Returns the IoU of two bounding boxes
     """
@@ -268,7 +268,7 @@ def non_max_suppression(prediction, num_classes, conf_thres = 0.5, nms_thres = 0
                 # Stop if we're at the last detection
                 if len(detections_class) == 1:
                     break
-                # Get the IOUs for all other boxes with lower confidence
+                # Get the IOUs for all other boxes of the given class with lower confidence
                 ious = bbox_iou(max_detections[-1], detections_class[1:])
                 # Remove detections with IoU >= NMS threshold
                 detections_class = detections_class[1:][ious < nms_thres]
