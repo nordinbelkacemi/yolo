@@ -126,8 +126,7 @@ class YoloLayer(nn.Module):
                 pred_class.view(nB, -1, self.num_classes)
             ), -1)
 
-            w = output[0, 0, 2].item() - output[0, 0, 0].item()
-            h = output[0, 0, 3].item() - output[0, 0, 1].item()
+            w, h = output[0, 0, 2].item(), output[0, 0, 3].item()
             print(w, h)
 
         return output
