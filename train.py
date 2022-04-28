@@ -31,7 +31,8 @@ def train(model, dataloader, using_cuda, num_epochs = 10):
 
             optimizer.zero_grad()
             all_losses = model(imgs, targets)
-            print(all_losses)
+            with torch.no_grad():
+                print(all_losses)
             all_losses[0].backward()
             optimizer.step()
 
