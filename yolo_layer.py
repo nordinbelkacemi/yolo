@@ -27,7 +27,7 @@ class YoloLayer(nn.Module):
         nA = len(self.anchors)
         nGy = x.size(2)
         nGx = x.size(3)
-        
+
         # height (and also width) of a grid cell in pixels
         stride = self.image_dim[0] / nGy
 
@@ -53,8 +53,8 @@ class YoloLayer(nn.Module):
         grid_y = torch.arange(nGy).repeat(nGx, 1).t().view(
             [1, 1, nGy, nGx]).type(FloatTensor)
 
-        scaled_anchors = FloatTensor(
-            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
+        all_scaled_anchors = FloatTensor([(a_w / stride, a_h / stride) for a_w, a_h in self.all_anchors])
+        scaled_anchors = FloatTensor([(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
         anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1))
         anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1))
 
@@ -78,7 +78,7 @@ class YoloLayer(nn.Module):
                 pred_conf = pred_conf.cpu().detach(),
                 pred_classes = pred_class.cpu().detach(),
                 target = targets.cpu().detach(),
-                all_anchors = self.all_anchors,
+                all_anchors = all_scaled_anchors.cpu().detach(),
                 anchors = scaled_anchors.cpu().detach(),
                 anchor_mask = self.anchor_mask,
                 grid_size_y = nGy,
@@ -101,6 +101,7 @@ class YoloLayer(nn.Module):
             conf_mask_true = mask
             conf_mask_false = conf_mask ^ mask
 
+            # print(int(torch.isnan(x[mask]).sum().item()))
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
             loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
             loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
