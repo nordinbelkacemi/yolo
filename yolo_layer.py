@@ -1,15 +1,16 @@
 import torch
 from torch import nn
-from util import CIoULoss, build_targets
+from util import build_targets
 
 img_dim = (384, 512)
 
 class YoloLayer(nn.Module):
     """Detection layer"""
-    def __init__(self, anchors, num_classes):
+    def __init__(self, anchors, anchor_mask, num_classes):
         super(YoloLayer, self).__init__()
-        self.anchors = anchors
-        self.num_anchors = len(anchors)
+        self.all_anchors = anchors
+        self.anchor_mask = anchor_mask
+        self.anchors = anchors[anchor_mask[0]:anchor_mask[-1] + 1]
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
         self.image_dim = img_dim # (H, W)
@@ -22,10 +23,11 @@ class YoloLayer(nn.Module):
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
     def forward(self, x, targets = None):
-        nA = self.num_anchors
         nB = x.size(0)
+        nA = len(self.anchors)
         nGy = x.size(2)
         nGx = x.size(3)
+        
         # height (and also width) of a grid cell in pixels
         stride = self.image_dim[0] / nGy
 
@@ -42,12 +44,6 @@ class YoloLayer(nn.Module):
         y = torch.sigmoid(prediction[..., 1])  # Center y
         w = prediction[..., 2]  # Width
         h = prediction[..., 3]  # Height
-        # pred_box = torch.cat((
-        #     x.unsqueeze(-1),
-        #     y.unsqueeze(-1),
-        #     w.unsqueeze(-1),
-        #     h.unsqueeze(-1)
-        # ), dim = -1)
         pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
         pred_class = prediction[..., 5:]  # Class
 
@@ -82,7 +78,9 @@ class YoloLayer(nn.Module):
                 pred_conf = pred_conf.cpu().detach(),
                 pred_classes = pred_class.cpu().detach(),
                 target = targets.cpu().detach(),
+                all_anchors = self.all_anchors,
                 anchors = scaled_anchors.cpu().detach(),
+                anchor_mask = self.anchor_mask,
                 grid_size_y = nGy,
                 grid_size_x = nGx,
                 ignore_thres = self.ignore_thres,

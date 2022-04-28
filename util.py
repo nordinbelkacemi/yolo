@@ -51,7 +51,7 @@ def get_anchor_ious(w, h, anchors):
     return bbox_iou(gt_box, anchor_shapes)
 
 
-def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, grid_size_y, grid_size_x, ignore_thres):
+def build_targets(pred_boxes, pred_conf, pred_classes, target, all_anchors, anchors, anchor_mask, grid_size_y, grid_size_x, ignore_thres):
     """
     pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
@@ -68,7 +68,7 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, grid_siz
     # print(pred_boxes.size(), pred_conf.size(), pred_classes.size(), target.size(), anchors.size(), num_anchors, num_classes, grid_size_y, grid_size_x, ignore_thres, img_dim)
     #     -> output: torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 6, 12, 16]) torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 50, 5]) torch.Size([6, 2]) 6 4 12 16 0.5 (384, 512)
 
-    nB = target.size(0)  # batch_size
+    nB = target.size(0)
     nA = len(anchors)
     nGx = grid_size_x
     nGy = grid_size_y
@@ -83,30 +83,36 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, grid_siz
     tconf = torch.ByteTensor(nB, nA, nGy, nGx).fill_(0)
     tcls = torch.ByteTensor(nB, nA, nGy, nGx).fill_(0)
 
-    nGT = 0
-    nCorrect = 0
+    nGT, nCorrect = 0, 0
     for b in range(nB):
         for t in range(target.shape[1]):
             if target[b, t].sum() == 0:
                 continue
-            nGT += 1
 
             # Convert to position relative to box
-            t_class = target[b, t, 0].long()
             gx = target[b, t, 1] * nGx
             gy = target[b, t, 2] * nGy
             gw = target[b, t, 3] * nGx
             gh = target[b, t, 4] * nGy
 
+            # Get IoU values between target and anchors
+            all_anch_ious = get_anchor_ious(gw, gh, all_anchors)
+            anch_ious = all_anch_ious[anchor_mask[0]:anchor_mask[-1] + 1]
+
+            # Find the best matching anchor box and ignore if it is not in the anchor_mask
+            best_n = np.argmax(all_anch_ious)
+            if best_n in anchor_mask:
+                nGT += 1
+                best_n = best_n % nA
+            else:
+                continue
+
+            # target class
+            t_class = target[b, t, 0].long()
+
             # Get grid box indices
             gi = int(gx)
             gj = int(gy)
-
-            # Get IoU values between target and anchors
-            anch_ious = get_anchor_ious(gw, gh, anchors)
-
-            # Find the best matching anchor box and ignore if it is not in the anchor_mask
-            best_n = np.argmax(anch_ious)
 
             # Where the overlap is larger than threshold, set conf_mask to zero (ignore)
             conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0

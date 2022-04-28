@@ -297,14 +297,14 @@ class YoloHead(nn.Module):
         # anchors for yolo layers: i.e. if we have 9 anchor boxes, we split them up into 3 arrays of 3 anchor boxes
         assert(len(anchors) % 3 == 0)
         step = len(anchors) // 3
-        anchors_sml = [anchors[i] for i in range(step * 0, step * 1)]
-        anchors_med = [anchors[i] for i in range(step * 1, step * 2)]
-        anchors_lrg = [anchors[i] for i in range(step * 2, step * 3)]
+        anchors_mask_sml = [i for i in range(step * 0, step * 1)]
+        anchors_mask_med = [i for i in range(step * 1, step * 2)]
+        anchors_mask_lrg = [i for i in range(step * 2, step * 3)]
 
         self.conv1 = ConvBnActivation(128, 256, 3, 1, "leaky")
         self.conv2 = nn.Conv2d(256, num_out_channels, 1)
 
-        self.yolo1 = YoloLayer(anchors_sml, num_classes)
+        self.yolo1 = YoloLayer(anchors, anchors_mask_sml, num_classes)
 
         self.conv3 = ConvBnActivation(128, 256, 3, 2, "leaky")
 
@@ -316,7 +316,7 @@ class YoloHead(nn.Module):
         self.conv9 = ConvBnActivation(256, 512, 3, 1, "leaky")
         self.conv10 = nn.Conv2d(512, num_out_channels, 1)
 
-        self.yolo2 = YoloLayer(anchors_med, num_classes)
+        self.yolo2 = YoloLayer(anchors, anchors_mask_med, num_classes)
 
         self.conv11 = ConvBnActivation(256, 512, 3, 2, "leaky")
 
@@ -328,7 +328,7 @@ class YoloHead(nn.Module):
         self.conv17 = ConvBnActivation(512, 1024, 3, 1, "leaky")
         self.conv18 = nn.Conv2d(1024, num_out_channels, 1)
 
-        self.yolo3 = YoloLayer(anchors_lrg, num_classes)
+        self.yolo3 = YoloLayer(anchors, anchors_mask_lrg, num_classes)
 
     def forward(self, input1, input2, input3, targets = None):
         x1 = self.conv1(input1)
@@ -362,7 +362,7 @@ class YoloHead(nn.Module):
             losses_3 = self.yolo3(x18, targets)
 
             # for precision and recall
-            nGT = losses_1[7]
+            nGT = losses_1[7] + losses_2[7] + losses_3[7]
             nProposals = losses_1[8] + losses_2[8] + losses_3[8]
             nCorrect = losses_1[9] + losses_2[9] + losses_3[9]
 
@@ -374,8 +374,8 @@ class YoloHead(nn.Module):
                 losses_1[4] + losses_2[4] + losses_3[4],
                 losses_1[5] + losses_2[5] + losses_3[5],
                 losses_1[6] + losses_2[6] + losses_3[6],
-                nCorrect / nGT if nGT else 1, # precision
-                nCorrect / nProposals if nProposals else 0 # recall
+                nCorrect / nGT if nGT else 1, # recall
+                nCorrect / nProposals if nProposals else 0 # precision
             )
         else:
             y1 = self.yolo1(x2)
@@ -411,4 +411,5 @@ class Yolo(nn.Module):
         x20, x13, x6 = self.neck(d5, d4, d3)
 
         output = self.head(x20, x13, x6, targets)
+        print("batch.")
         return output
