@@ -411,5 +411,4 @@ class Yolo(nn.Module):
         x20, x13, x6 = self.neck(d5, d4, d3)
 
         output = self.head(x20, x13, x6, targets)
-        print("batch.")
         return output
