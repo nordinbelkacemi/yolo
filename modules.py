@@ -297,9 +297,9 @@ class YoloHead(nn.Module):
         # anchors for yolo layers: i.e. if we have 9 anchor boxes, we split them up into 3 arrays of 3 anchor boxes
         assert(len(anchors) % 3 == 0)
         step = len(anchors) // 3
-        anchor_mask_sml = [i for i in range(step * 0, step * 1)]
-        anchor_mask_med = [i for i in range(step * 1, step * 2)]
-        anchor_mask_lrg = [i for i in range(step * 2, step * 3)]
+        anchor_mask_sml = [i for i in range(step * 0, step * 3)]
+        anchor_mask_med = [i for i in range(step * 0, step * 3)]
+        anchor_mask_lrg = [i for i in range(step * 0, step * 3)]
 
 
         self.conv1 = ConvBnActivation(128, 256, 3, 1, "leaky")
@@ -381,7 +381,7 @@ class Yolo(nn.Module):
     def __init__(self, anchors, num_classes):
         super(Yolo, self).__init__()
 
-        num_out_channels = (5 + num_classes) * (len(anchors) // 3)
+        num_out_channels = (5 + num_classes) * len(anchors)
 
         self.downsample1 = DownSample1()
         self.downsample2 = DownSample2()

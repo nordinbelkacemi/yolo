@@ -21,8 +21,8 @@ def train(model, dataloader, using_cuda, num_epochs = 10):
 
     # training loop
     for epoch in range(num_epochs):
-        # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_box, loss_conf, loss_cls, recall, precision)
-        all_losses_sum = np.zeros((3, 6))
+        # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
+        all_losses_sum = np.zeros((3, 9))
 
         for i, (_, imgs, targets) in enumerate(dataloader):
             if using_cuda:

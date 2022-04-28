@@ -198,15 +198,18 @@ def print_losses(dataloader, all_losses, idx):
         idx: an integer used to select the detection stage.
     """
     stage_losses = all_losses[idx]
-    print("\tLosses %d: ciou %f, conf %f, cls %f, total %f, recall: %.5f, precision: %.5f"
+    print("\tLosses %d: x %f, y %f, w %f, h %f, conf %f, cls %f, total %f, recall: %.5f, precision: %.5f"
         % (
             idx + 1,
             stage_losses[1] / float(len(dataloader)),
             stage_losses[2] / float(len(dataloader)),
             stage_losses[3] / float(len(dataloader)),
-            stage_losses[0] / float(len(dataloader)),
             stage_losses[4] / float(len(dataloader)),
-            stage_losses[5] / float(len(dataloader))
+            stage_losses[5] / float(len(dataloader)),
+            stage_losses[6] / float(len(dataloader)),
+            stage_losses[0] / float(len(dataloader)),
+            stage_losses[7] / float(len(dataloader)),
+            stage_losses[8] / float(len(dataloader))
         )
     )
 
