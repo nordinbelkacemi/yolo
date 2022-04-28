@@ -297,15 +297,14 @@ class YoloHead(nn.Module):
         # anchors for yolo layers: i.e. if we have 9 anchor boxes, we split them up into 3 arrays of 3 anchor boxes
         assert(len(anchors) % 3 == 0)
         step = len(anchors) // 3
-        anchor_mask_sml = [i for i in range(step * 0, step * 3)]
-        anchor_mask_med = [i for i in range(step * 0, step * 3)]
-        anchor_mask_lrg = [i for i in range(step * 0, step * 3)]
-
+        anchors_sml = [anchors[i] for i in range(step * 0, step * 1)]
+        anchors_med = [anchors[i] for i in range(step * 1, step * 2)]
+        anchors_lrg = [anchors[i] for i in range(step * 2, step * 3)]
 
         self.conv1 = ConvBnActivation(128, 256, 3, 1, "leaky")
         self.conv2 = nn.Conv2d(256, num_out_channels, 1)
 
-        self.yolo1 = YoloLayer(anchors, anchor_mask_sml, num_classes)
+        self.yolo1 = YoloLayer(anchors_sml, num_classes)
 
         self.conv3 = ConvBnActivation(128, 256, 3, 2, "leaky")
 
@@ -317,7 +316,7 @@ class YoloHead(nn.Module):
         self.conv9 = ConvBnActivation(256, 512, 3, 1, "leaky")
         self.conv10 = nn.Conv2d(512, num_out_channels, 1)
 
-        self.yolo2 = YoloLayer(anchors, anchor_mask_med, num_classes)
+        self.yolo2 = YoloLayer(anchors_med, num_classes)
 
         self.conv11 = ConvBnActivation(256, 512, 3, 2, "leaky")
 
@@ -329,7 +328,7 @@ class YoloHead(nn.Module):
         self.conv17 = ConvBnActivation(512, 1024, 3, 1, "leaky")
         self.conv18 = nn.Conv2d(1024, num_out_channels, 1)
 
-        self.yolo3 = YoloLayer(anchors, anchor_mask_lrg, num_classes)
+        self.yolo3 = YoloLayer(anchors_lrg, num_classes)
 
     def forward(self, input1, input2, input3, targets = None):
         x1 = self.conv1(input1)
@@ -390,7 +389,7 @@ class Yolo(nn.Module):
     def __init__(self, anchors, num_classes):
         super(Yolo, self).__init__()
 
-        num_out_channels = (5 + num_classes) * len(anchors)
+        num_out_channels = (5 + num_classes) * (len(anchors) // 3)
 
         self.downsample1 = DownSample1()
         self.downsample2 = DownSample2()

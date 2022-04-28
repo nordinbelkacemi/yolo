@@ -51,7 +51,7 @@ def get_anchor_ious(w, h, anchors):
     return bbox_iou(gt_box, anchor_shapes)
 
 
-def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_mask, grid_size_y, grid_size_x, ignore_thres):
+def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, grid_size_y, grid_size_x, ignore_thres):
     """
     pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
@@ -69,7 +69,7 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_m
     #     -> output: torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 6, 12, 16]) torch.Size([32, 6, 12, 16, 4]) torch.Size([32, 50, 5]) torch.Size([6, 2]) 6 4 12 16 0.5 (384, 512)
 
     nB = target.size(0)  # batch_size
-    nA = len(anchor_mask)
+    nA = len(anchors)
     nGx = grid_size_x
     nGy = grid_size_y
 
@@ -105,20 +105,11 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, anchors, anchor_m
             # Get IoU values between target and anchors
             anch_ious = get_anchor_ious(gw, gh, anchors)
 
-            # Slice anch_ious according to the anchor_mask given
-            mask_start, mask_end = anchor_mask[0], anchor_mask[-1]
-            sub_anch_ious = anch_ious[mask_start:mask_end + 1]
-
             # Find the best matching anchor box and ignore if it is not in the anchor_mask
             best_n = np.argmax(anch_ious)
-            if best_n not in anchor_mask:
-                nGT -= 1
-                continue
-            else:
-                best_n = best_n % nA
 
-            # Where the overlap is larger than threshold set conf_mask to zero (ignore)
-            conf_mask[b, sub_anch_ious > ignore_thres, gj, gi] = 0
+            # Where the overlap is larger than threshold, set conf_mask to zero (ignore)
+            conf_mask[b, anch_ious > ignore_thres, gj, gi] = 0
 
             # Create ground truth box
             gt_box = torch.FloatTensor(np.array([gx, gy, gw, gh])).unsqueeze(0)

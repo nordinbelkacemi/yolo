@@ -6,24 +6,23 @@ img_dim = (384, 512)
 
 class YoloLayer(nn.Module):
     """Detection layer"""
-    def __init__(self, anchors, anchor_mask, num_classes):
+    def __init__(self, anchors, num_classes):
         super(YoloLayer, self).__init__()
         self.anchors = anchors
-        self.anchor_mask = anchor_mask
-        self.num_sub_anchors = len(anchor_mask)
+        self.num_anchors = len(anchors)
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
         self.image_dim = img_dim # (H, W)
         self.ignore_thres = 0.5
         self.lambda_coord = 1
 
-        self.ciou_loss = CIoULoss()  # Coordinate loss
+        # self.ciou_loss = CIoULoss()  # Coordinate loss
         self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
         self.bce_loss = nn.BCELoss(reduction='mean')  # Confidence loss
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
     def forward(self, x, targets = None):
-        nA = self.num_sub_anchors
+        nA = self.num_anchors
         nB = x.size(0)
         nGy = x.size(2)
         nGx = x.size(3)
@@ -59,7 +58,7 @@ class YoloLayer(nn.Module):
             [1, 1, nGy, nGx]).type(FloatTensor)
 
         scaled_anchors = FloatTensor(
-            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors[self.anchor_mask[0]: self.anchor_mask[-1] + 1]])
+            [(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
         anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1))
         anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1))
 
@@ -84,7 +83,6 @@ class YoloLayer(nn.Module):
                 pred_classes = pred_class.cpu().detach(),
                 target = targets.cpu().detach(),
                 anchors = scaled_anchors.cpu().detach(),
-                anchor_mask = self.anchor_mask,
                 grid_size_y = nGy,
                 grid_size_x = nGx,
                 ignore_thres = self.ignore_thres,
@@ -105,12 +103,7 @@ class YoloLayer(nn.Module):
             conf_mask_true = mask
             conf_mask_false = conf_mask ^ mask
 
-            # print(f"x size: {x[mask]}, x[mask]")
-            # print(f"tx sample: {tbox[mask][:, 0]}")
-
-            # Mask outputs to ignore non-existing objects
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
-            # print(x[mask].size(), tbox[mask][:, 1].size())
             loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
             loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
             loss_w = self.mse_loss(w[mask], tbox[mask][:, 2])

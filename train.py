@@ -39,7 +39,7 @@ def train(model, dataloader, using_cuda, num_epochs = 20):
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
 
-        print_losses(dataloader, losses, i, num_epochs)
+        print_losses(dataloader, losses, epoch, num_epochs)
 
 def save(model, path):
     torch.save(model.state_dict(), path)
