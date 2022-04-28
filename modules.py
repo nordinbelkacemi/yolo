@@ -376,7 +376,7 @@ class YoloHead(nn.Module):
                 losses_1[5] + losses_2[5] + losses_3[5],
                 losses_1[6] + losses_2[6] + losses_3[6],
                 nCorrect / nGT if nGT else 1, # precision
-                nCorrect / nProposals # recall
+                nCorrect / nProposals if nProposals else 0 # recall
             )
         else:
             y1 = self.yolo1(x2)
