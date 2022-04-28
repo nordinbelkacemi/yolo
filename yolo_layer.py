@@ -98,6 +98,8 @@ class YoloLayer(nn.Module):
             mask = mask.type(ByteTensor).bool()
             conf_mask = conf_mask.type(ByteTensor).bool()
 
+            print(mask.sum())
+
             # Handle target variables
             tbox = tbox.type(FloatTensor)
             tconf = tconf.type(FloatTensor)
