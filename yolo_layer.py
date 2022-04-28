@@ -111,8 +111,8 @@ class YoloLayer(nn.Module):
             # print(f"{(tconf[conf_mask_false] < 0).sum(), (tconf[conf_mask_true] < 0).sum()}\t(tconf < 0).sum()")
             # print(f"{(pred_conf[conf_mask_false] > 1).sum(), (pred_conf[conf_mask_true] > 1).sum()}\t(pred_conf > 1).sum()")
             # print(f"{(tconf[conf_mask_false] > 1).sum(), (tconf[conf_mask_true] > 1).sum()}\t(tconf > 1).sum()\n")
-            print(torch.isnan(pred_conf).sum(), torch.isnan(tconf).sum())
-            print(torch.isnan(x).sum())
+            # print(torch.isnan(pred_conf).sum(), torch.isnan(tconf).sum())
+            # print(torch.isnan(x).sum())
 
             # Mask outputs to ignore non-existing objects
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
