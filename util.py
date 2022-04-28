@@ -188,28 +188,19 @@ class CIoULoss(nn.Module):
 
         return torch.mean(loss)
 
-def print_losses(dataloader, all_losses, idx):
-    """
-    Args:
-        all_losses: numpy array of all the losses. Its shape is (3, n_loss),
-        where n_loss is the number of loss metrics that the YoloLayer returns
-        when training.
-        
-        idx: an integer used to select the detection stage.
-    """
-    stage_losses = all_losses[idx]
-    print("\tLosses %d: x %f, y %f, w %f, h %f, conf %f, cls %f, total %f, recall: %.5f, precision: %.5f"
+def print_losses(dataloader, losses, epoch, num_epochs):
+    print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
+    print("Losses: total %f, x %f, y %f, w %f, h %f, conf %f, cls %f, recall: %.5f, precision: %.5f"
         % (
-            idx + 1,
-            stage_losses[1] / float(len(dataloader)),
-            stage_losses[2] / float(len(dataloader)),
-            stage_losses[3] / float(len(dataloader)),
-            stage_losses[4] / float(len(dataloader)),
-            stage_losses[5] / float(len(dataloader)),
-            stage_losses[6] / float(len(dataloader)),
-            stage_losses[0] / float(len(dataloader)),
-            stage_losses[7] / float(len(dataloader)),
-            stage_losses[8] / float(len(dataloader))
+            losses[0] / float(len(dataloader)),
+            losses[1] / float(len(dataloader)),
+            losses[2] / float(len(dataloader)),
+            losses[3] / float(len(dataloader)),
+            losses[4] / float(len(dataloader)),
+            losses[5] / float(len(dataloader)),
+            losses[6] / float(len(dataloader)),
+            losses[7] / float(len(dataloader)),
+            losses[8] / float(len(dataloader))
         )
     )
 

@@ -9,7 +9,7 @@ def init_model(num_classes, anchors, using_cuda):
     model = Yolo(anchors, num_classes).to(device)
     return model
 
-def train(model, dataloader, using_cuda, num_epochs = 10):
+def train(model, dataloader, using_cuda, num_epochs = 20):
     # set to training mode
     model.train()
 
@@ -22,7 +22,7 @@ def train(model, dataloader, using_cuda, num_epochs = 10):
     # training loop
     for epoch in range(num_epochs):
         # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
-        all_losses_sum = np.zeros((3, 9))
+        losses = np.zeros(9)
 
         for i, (_, imgs, targets) in enumerate(dataloader):
             if using_cuda:
@@ -30,18 +30,16 @@ def train(model, dataloader, using_cuda, num_epochs = 10):
                 targets = targets.cuda().requires_grad_(False)
 
             optimizer.zero_grad()
-            all_losses = model(imgs, targets)
-            all_losses[0].backward()
+            loss = model(imgs, targets)
+            loss[0].backward()
             optimizer.step()
 
-            all_losses_sum += torch.Tensor(all_losses[:][1:]).cpu().detach().numpy()
+            losses += torch.Tensor(loss).cpu().detach().numpy()
             
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
 
-        print("[ Epoch %d/%d ]" % (epoch + 1, num_epochs))
-        for i in range(3):
-            print_losses(dataloader, all_losses_sum, i)
+        print_losses(dataloader, losses, i, num_epochs)
 
 def save(model, path):
     torch.save(model.state_dict(), path)

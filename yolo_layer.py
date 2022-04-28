@@ -91,8 +91,6 @@ class YoloLayer(nn.Module):
             )
 
             nProposals = int((pred_conf > 0.5).sum().item())
-            recall = float(nCorrect / nGT) if nGT else 1
-            precision = float(nCorrect / nProposals) if nProposals != 0 else 0
 
             # Handle masks
             mask = mask.type(ByteTensor).bool()
@@ -131,8 +129,9 @@ class YoloLayer(nn.Module):
                 loss_h.item(),
                 loss_conf.item(),
                 loss_cls.item(),
-                recall,
-                precision
+                nGT,
+                nProposals,
+                nCorrect
             )
 
         else:

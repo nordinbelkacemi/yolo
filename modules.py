@@ -361,13 +361,22 @@ class YoloHead(nn.Module):
             losses_1 = self.yolo1(x2, targets)
             losses_2 = self.yolo2(x10, targets)
             losses_3 = self.yolo3(x18, targets)
-            total_loss = losses_1[0] + losses_2[0] + losses_3[0]
-            
+
+            # for precision and recall
+            nGT = losses_1[7]
+            nProposals = losses_1[8] + losses_2[8] + losses_3[8]
+            nCorrect = losses_1[9] + losses_2[9] + losses_3[9]
+
             return (
-                total_loss,
-                losses_1,
-                losses_2,
-                losses_3
+                losses_1[0] + losses_2[0] + losses_3[0],
+                losses_1[1] + losses_2[1] + losses_3[1],
+                losses_1[2] + losses_2[2] + losses_3[2],
+                losses_1[3] + losses_2[3] + losses_3[3],
+                losses_1[4] + losses_2[4] + losses_3[4],
+                losses_1[5] + losses_2[5] + losses_3[5],
+                losses_1[6] + losses_2[6] + losses_3[6],
+                nCorrect / nGT if nGT else 1, # precision
+                nCorrect / nProposals # recall
             )
         else:
             y1 = self.yolo1(x2)
