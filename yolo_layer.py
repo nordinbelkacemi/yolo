@@ -18,6 +18,7 @@ class YoloLayer(nn.Module):
         self.lambda_coord = 1
 
         self.ciou_loss = CIoULoss()  # Coordinate loss
+        self.mse_loss = nn.MSELoss(reduction='mean')  # Coordinate loss
         self.bce_loss = nn.BCELoss(reduction='mean')  # Confidence loss
         self.ce_loss = nn.CrossEntropyLoss(reduction='mean')  # Class loss
 
@@ -42,12 +43,12 @@ class YoloLayer(nn.Module):
         y = torch.sigmoid(prediction[..., 1])  # Center y
         w = prediction[..., 2]  # Width
         h = prediction[..., 3]  # Height
-        pred_box = torch.cat((
-            x.unsqueeze(-1),
-            y.unsqueeze(-1),
-            w.unsqueeze(-1),
-            h.unsqueeze(-1)
-        ), dim = -1)
+        # pred_box = torch.cat((
+        #     x.unsqueeze(-1),
+        #     y.unsqueeze(-1),
+        #     w.unsqueeze(-1),
+        #     h.unsqueeze(-1)
+        # ), dim = -1)
         pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
         pred_class = prediction[..., 5:]  # Class
 
@@ -73,6 +74,7 @@ class YoloLayer(nn.Module):
         if targets is not None:
             if x.is_cuda:
                 self.ciou_loss = self.ciou_loss.cuda()
+                self.mse_loss = self.mse_loss.cuda()
                 self.bce_loss = self.bce_loss.cuda()
                 self.ce_loss = self.ce_loss.cuda()
 
@@ -105,8 +107,21 @@ class YoloLayer(nn.Module):
             conf_mask_true = mask
             conf_mask_false = conf_mask ^ mask
 
+            # print(f"{(pred_conf[conf_mask_false] < 0).sum(), (pred_conf[conf_mask_true] < 0).sum()}\t(pred_conf < 0).sum()")
+            # print(f"{(tconf[conf_mask_false] < 0).sum(), (tconf[conf_mask_true] < 0).sum()}\t(tconf < 0).sum()")
+            # print(f"{(pred_conf[conf_mask_false] > 1).sum(), (pred_conf[conf_mask_true] > 1).sum()}\t(pred_conf > 1).sum()")
+            # print(f"{(tconf[conf_mask_false] > 1).sum(), (tconf[conf_mask_true] > 1).sum()}\t(tconf > 1).sum()\n")
+            print(torch.isnan(pred_conf).sum(), torch.isnan(tconf).sum())
+            print(torch.isnan(x).sum())
+
             # Mask outputs to ignore non-existing objects
-            loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
+            # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
+            # print(x[mask].size(), tbox[mask][:, 1].size())
+            loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
+            loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
+            loss_w = self.mse_loss(w[mask], tbox[mask][:, 2])
+            loss_h = self.mse_loss(h[mask], tbox[mask][:, 3])
+            loss_box = loss_x + loss_y + loss_w + loss_h
             loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
                         + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
             loss_cls = self.ce_loss(pred_class[mask], tcls[mask])

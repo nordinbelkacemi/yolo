@@ -27,7 +27,9 @@ class ListDataset(Dataset):
         self.img_shape = model_input_img_size
         self.transform = transforms.Compose([
             transforms.Resize(model_input_img_size),
-            transforms.ToTensor()
+            transforms.ToTensor(),
+            transforms.Normalize((0.4051, 0.4807, 0.4872),
+                                 (0.2181, 0.0336, 0.0453))
         ])
 
     def __getitem__(self, index):
