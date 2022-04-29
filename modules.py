@@ -357,6 +357,9 @@ class YoloHead(nn.Module):
         x18 = self.conv18(x17)
 
         if targets is not None:
+            print(int(torch.isnan(x2.cpu().detach()).sum().item()))
+            print(int(torch.isnan(x10.cpu().detach()).sum().item()))
+            print(int(torch.isnan(x18.cpu().detach()).sum().item()))
             losses_1 = self.yolo1(x2, targets)
             losses_2 = self.yolo2(x10, targets)
             losses_3 = self.yolo3(x18, targets)
