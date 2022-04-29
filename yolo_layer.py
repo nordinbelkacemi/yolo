@@ -110,7 +110,8 @@ class YoloLayer(nn.Module):
             loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
                         + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
             loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
-            print(f"x: {loss_x}, y: {loss_y}, w: {loss_w}, h: {loss_h}, conf: {loss_conf}, cls: {loss_cls}")
+            print(
+                f"x: {loss_x:.3f}, y: {loss_y:.3f}, w: {loss_w:.3f}, h: {loss_h:.3f}, conf: {loss_conf:.3f}, cls: {loss_cls}:.3f")
 
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
