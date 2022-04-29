@@ -103,6 +103,8 @@ class YoloLayer(nn.Module):
 
             print(int(torch.isnan(x[mask].cpu().detach()).sum().item()))
             print(int(torch.isnan(tbox[mask][:, 0].cpu().detach()).sum().item()))
+            print(x[mask])
+            print(tbox[mask][:, 0])
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
             loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
             loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
