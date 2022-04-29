@@ -329,6 +329,49 @@ class YoloHead(nn.Module):
         self.conv18 = nn.Conv2d(1024, num_out_channels, 1)
 
         self.yolo3 = YoloLayer(anchors, anchors_mask_lrg, num_classes)
+    
+    def yolo_loss(self, yolo_output1, yolo_output2, yolo_output3):
+        mse_loss = nn.MSELoss(reduction = 'mean')  # Coordinate loss
+        bce_loss = nn.BCELoss(reduction = 'mean')  # Confidence loss
+        ce_loss = nn.CrossEntropyLoss(reduction = 'mean')  # Class loss
+
+        # predictions
+        pred_x = torch.cat((yolo_output1[0][0], yolo_output2[0][0], yolo_output3[0][0]))
+        pred_y = torch.cat((yolo_output1[1][0], yolo_output2[1][0], yolo_output3[1][0]))
+        pred_w = torch.cat((yolo_output1[2][0], yolo_output2[2][0], yolo_output3[2][0]))
+        pred_h = torch.cat((yolo_output1[3][0], yolo_output2[3][0], yolo_output3[3][0]))
+        pred_conf_false = torch.cat((yolo_output1[4][0], yolo_output2[4][0], yolo_output3[4][0]))
+        pred_conf_true = torch.cat((yolo_output1[4][2], yolo_output2[4][2], yolo_output3[4][2]))
+        pred_cls = torch.cat((yolo_output1[5][0], yolo_output2[5][0], yolo_output3[5][0]))
+
+        # targets
+        t_x = torch.cat((yolo_output1[0][1], yolo_output2[0][1], yolo_output3[0][1]))
+        t_y = torch.cat((yolo_output1[1][1], yolo_output2[1][1], yolo_output3[1][1]))
+        t_w = torch.cat((yolo_output1[2][1], yolo_output2[2][1], yolo_output3[2][1]))
+        t_h = torch.cat((yolo_output1[3][1], yolo_output2[3][1], yolo_output3[3][1]))
+        t_conf_false = torch.cat((yolo_output1[4][1], yolo_output2[4][1], yolo_output3[4][1]))
+        t_conf_true = torch.cat((yolo_output1[4][3], yolo_output2[4][3], yolo_output3[4][3]))
+        t_cls = torch.cat((yolo_output1[5][1], yolo_output2[5][1], yolo_output3[5][1]))
+
+        x_loss = mse_loss(pred_x, t_x)
+        y_loss = mse_loss(pred_y, t_y)
+        w_loss = mse_loss(pred_w, t_w)
+        h_loss = mse_loss(pred_h, t_h)
+        conf_loss = 10 * bce_loss(pred_conf_false, t_conf_false) \
+                    + bce_loss(pred_conf_true, t_conf_true)
+        cls_loss = ce_loss(pred_cls, t_cls)
+
+        total_loss = x_loss + y_loss + w_loss + h_loss + conf_loss + cls_loss
+
+        return (
+            total_loss,
+            x_loss,
+            y_loss,
+            w_loss,
+            h_loss,
+            conf_loss,
+            cls_loss,
+        )
 
     def forward(self, input1, input2, input3, targets = None):
         x1 = self.conv1(input1)
@@ -357,27 +400,26 @@ class YoloHead(nn.Module):
         x18 = self.conv18(x17)
 
         if targets is not None:
-            # print(int(torch.isnan(x2.cpu().detach()).sum().item()))
-            # print(int(torch.isnan(x10.cpu().detach()).sum().item()))
-            # print(int(torch.isnan(x18.cpu().detach()).sum().item()))
-            losses_1 = self.yolo1(x2, targets)
-            losses_2 = self.yolo2(x10, targets)
-            losses_3 = self.yolo3(x18, targets)
+            yolo_output1 = self.yolo1(x2, targets)
+            yolo_output2 = self.yolo2(x10, targets)
+            yolo_output3 = self.yolo3(x18, targets)
+
+            losses = self.yolo_loss(yolo_output1, yolo_output2, yolo_output3)
 
             # for precision and recall
-            nGT = losses_1[7] + losses_2[7] + losses_3[7]
-            nProposals = losses_1[8] + losses_2[8] + losses_3[8]
-            nCorrect = losses_1[9] + losses_2[9] + losses_3[9]
+            nGT = yolo_output1[6] + yolo_output2[6] + yolo_output3[6]
+            nProposals = yolo_output1[7] + yolo_output2[7] + yolo_output3[7]
+            nCorrect = yolo_output1[8] + yolo_output2[8] + yolo_output3[8]
 
             losses = (
-                losses_1[0] + losses_2[0] + losses_3[0],
-                losses_1[1] + losses_2[1] + losses_3[1],
-                losses_1[2] + losses_2[2] + losses_3[2],
-                losses_1[3] + losses_2[3] + losses_3[3],
-                losses_1[4] + losses_2[4] + losses_3[4],
-                losses_1[5] + losses_2[5] + losses_3[5],
-                losses_1[6] + losses_2[6] + losses_3[6],
-                nCorrect / nGT if nGT else 1,  # recall
+                losses[0],                                  # total
+                losses[1],                                  # x
+                losses[2],                                  # y
+                losses[3],                                  # w
+                losses[4],                                  # h
+                losses[5],                                  # conf
+                losses[6],                                  # cls
+                nCorrect / nGT if nGT else 1,               # recall
                 nCorrect / nProposals if nProposals else 0  # precision
             )
 

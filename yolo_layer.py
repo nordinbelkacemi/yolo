@@ -101,27 +101,24 @@ class YoloLayer(nn.Module):
             conf_mask_true = mask
             conf_mask_false = conf_mask ^ mask
 
-            print(x[mask])
-            print(tbox[mask][:, 0])
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
-            loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
-            loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
-            loss_w = self.mse_loss(w[mask], tbox[mask][:, 2])
-            loss_h = self.mse_loss(h[mask], tbox[mask][:, 3])
-            loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
-                        + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
-            loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
+            # loss_x = self.mse_loss(x[mask], tbox[mask][:, 0])
+            # loss_y = self.mse_loss(y[mask], tbox[mask][:, 1])
+            # loss_w = self.mse_loss(w[mask], tbox[mask][:, 2])
+            # loss_h = self.mse_loss(h[mask], tbox[mask][:, 3])
+            # loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
+            #             + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
+            # loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
 
-            loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
+            # loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
             return (
-                loss,
-                loss_x.item(),
-                loss_y.item(),
-                loss_w.item(),
-                loss_h.item(),
-                loss_conf.item(),
-                loss_cls.item(),
+                (x[mask], tbox[mask][:, 0]),
+                (y[mask], tbox[mask][:, 1]),
+                (w[mask], tbox[mask][:, 2]),
+                (h[mask], tbox[mask][:, 3]),
+                (pred_conf[conf_mask_false], tconf[conf_mask_false], pred_conf[conf_mask_true], tconf[conf_mask_true]),
+                (pred_class[mask], tcls[mask]),
                 nGT,
                 nProposals,
                 nCorrect
