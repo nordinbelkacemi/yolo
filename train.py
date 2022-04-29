@@ -9,12 +9,12 @@ def init_model(num_classes, anchors, using_cuda):
     model = Yolo(anchors, num_classes).to(device)
     return model
 
-def train(model, dataloader, using_cuda, num_epochs = 20):
+def train(model, dataloader, using_cuda, lr = 0.001, num_epochs = 15):
     # set to training mode
     model.train()
 
     # initialize optimizer
-    optimizer = torch.optim.Adam(model.parameters(), weight_decay=1e-4)
+    optimizer = torch.optim.Adam(model.parameters(), lr, weight_decay = 1e-4)
 
     # initialize progress bar
     bar = display(progress(0, len(dataloader)), display_id = True)

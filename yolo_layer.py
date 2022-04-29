@@ -6,11 +6,11 @@ img_dim = (384, 512)
 
 class YoloLayer(nn.Module):
     """Detection layer"""
-    def __init__(self, anchors, anchor_mask, num_classes):
+    def __init__(self, all_anchors, anchor_mask, num_classes):
         super(YoloLayer, self).__init__()
-        self.all_anchors = anchors
+        self.all_anchors = all_anchors
         self.anchor_mask = anchor_mask
-        self.anchors = anchors[anchor_mask[0]:anchor_mask[-1] + 1]
+        self.anchors = all_anchors[anchor_mask[0]:anchor_mask[-1] + 1]
         self.num_classes = num_classes
         self.bbox_attrs = 5 + num_classes
         self.image_dim = img_dim # (H, W)
@@ -110,6 +110,7 @@ class YoloLayer(nn.Module):
             loss_conf = 10 * self.bce_loss(pred_conf[conf_mask_false], tconf[conf_mask_false]) \
                         + self.bce_loss(pred_conf[conf_mask_true], tconf[conf_mask_true])
             loss_cls = self.ce_loss(pred_class[mask], tcls[mask])
+            print(f"x: {loss_x}, y: {loss_y}, w: {loss_w}, h: {loss_h}, conf: {loss_conf}, cls: {loss_cls}")
 
             loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 

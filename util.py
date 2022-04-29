@@ -53,7 +53,7 @@ def get_anchor_ious(w, h, anchors):
 
 def build_targets(pred_boxes, pred_conf, pred_classes, target, all_anchors, anchors, anchor_mask, grid_size_y, grid_size_x, ignore_thres):
     """
-    pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 11-th grid box and 0.41 in the x direction)
+    pred_boxes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (x, y, w, h). x, y, w, and h are in "grid coordinates" (x = 12.41 means 13-th grid box and 0.41 in the x direction)
     pred_conf: shape is (batch_size, num_anchor_boxes, grid_y, grid_x) -> for each element in a batch, there are 6 12x16 grids of floats representing the prediction confidence (between 0 and 1)
     pred_classes: shape is (batch_size, num_anchor_boxes, grid_y, grid_x, 4) -> for each element in a batch, there are 6 12x16 grids of 4 dimensional vectors (s_0, s_1, s_2, s_3), where s_i is a score for class i.
     target: shape is (batch_size, 50, 5) -> for each element in a batch, there is a 50x5 matrix, where each row contains a class index, x, y, w and h.
