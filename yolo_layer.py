@@ -101,8 +101,6 @@ class YoloLayer(nn.Module):
             conf_mask_true = mask
             conf_mask_false = conf_mask ^ mask
 
-            print(int(torch.isnan(x[mask].cpu().detach()).sum().item()))
-            print(int(torch.isnan(tbox[mask][:, 0].cpu().detach()).sum().item()))
             print(x[mask])
             print(tbox[mask][:, 0])
             # loss_box = self.ciou_loss(pred_box[mask], tbox[mask])
