@@ -179,13 +179,14 @@ class YoloLayer(nn.Module):
 
             # Get conf mask where gt and where there is no gt
             conf_mask_true = mask
+            conf_mask_false = conf_mask ^ mask
 
             return (
                 (x[mask], tbox[mask][:, 0]),
                 (y[mask], tbox[mask][:, 1]),
                 (w[mask], tbox[mask][:, 2]),
                 (h[mask], tbox[mask][:, 3]),
-                (pred_conf[conf_mask_true], tconf[conf_mask_true]),
+                (pred_conf[conf_mask_true], tconf[conf_mask_true], pred_conf[conf_mask_false], tconf[conf_mask_false]),
                 (pred_class[mask], tcls[mask]),
                 nGT,
                 nProposals,
