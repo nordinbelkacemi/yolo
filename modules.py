@@ -357,7 +357,7 @@ class YoloHead(nn.Module):
             loss_w += F.mse_loss(input = pred_w, target = t_w, reduction = "sum")
             loss_h += F.mse_loss(input = pred_h, target = t_h, reduction = "sum")
             loss_conf += F.binary_cross_entropy(input = pred_conf_true, target = t_conf_true, reduction = "sum") + \
-                5 * F.binary_cross_entropy(input = pred_conf_false, target = t_conf_false, reduction = "sum")
+                10 * F.binary_cross_entropy(input = pred_conf_false, target = t_conf_false, reduction = "mean")
             loss_cls += F.cross_entropy(input = pred_cls, target = t_cls, reduction = "sum")
 
         loss += loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
