@@ -419,7 +419,7 @@ class YoloHead(nn.Module):
                 nCorrect / nProposals if nProposals else 0  # precision
             )
 
-            print(f"total: {losses[0]}, x: {losses[1]:.3f}, y: {losses[2]:.3f}, w: {losses[3]:.3f}, h: {losses[4]:.3f}, conf: {losses[5]:.3f}, cls: {losses[6]:.3f}")
+            # print(f"total: {losses[0]}, x: {losses[1]:.3f}, y: {losses[2]:.3f}, w: {losses[3]:.3f}, h: {losses[4]:.3f}, conf: {losses[5]:.3f}, cls: {losses[6]:.3f}")
 
             return losses
         else:

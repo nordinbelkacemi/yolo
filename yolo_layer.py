@@ -153,12 +153,6 @@ class YoloLayer(nn.Module):
 
         # Training
         if targets is not None:
-            if x.is_cuda:
-                # self.ciou_loss = self.ciou_loss.cuda()
-                self.mse_loss = self.mse_loss.cuda()
-                self.bce_loss = self.bce_loss.cuda()
-                self.ce_loss = self.ce_loss.cuda()
-
             nGT, nCorrect, mask, conf_mask, tbox, tconf, tcls = build_targets(
                 pred_boxes = pred_boxes.cpu().detach(),
                 pred_conf = pred_conf.cpu().detach(),
