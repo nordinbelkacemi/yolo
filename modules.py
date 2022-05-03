@@ -330,47 +330,43 @@ class YoloHead(nn.Module):
 
         self.yolo3 = YoloLayer(anchors, anchors_mask_lrg, num_classes)
     
-    def yolo_loss(self, yolo_output1, yolo_output2, yolo_output3):
-        mse_loss = nn.MSELoss(reduction = 'mean')  # Coordinate loss
-        bce_loss = nn.BCELoss(reduction = 'mean')  # Confidence loss
-        ce_loss = nn.CrossEntropyLoss(reduction = 'mean')  # Class loss
+    def yolo_loss(self, yolo_outputs):
+        loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls = 0, 0, 0, 0, 0, 0, 0
+        for output in yolo_outputs:
+            # predictions
+            pred_x = output[0][0]
+            pred_y = output[1][0]
+            pred_w = output[2][0]
+            pred_h = output[3][0]
+            pred_conf = output[4][0]
+            pred_cls = output[5][0]
 
-        # predictions
-        pred_x = torch.cat((yolo_output1[0][0], yolo_output2[0][0], yolo_output3[0][0]))
-        pred_y = torch.cat((yolo_output1[1][0], yolo_output2[1][0], yolo_output3[1][0]))
-        pred_w = torch.cat((yolo_output1[2][0], yolo_output2[2][0], yolo_output3[2][0]))
-        pred_h = torch.cat((yolo_output1[3][0], yolo_output2[3][0], yolo_output3[3][0]))
-        pred_conf_false = torch.cat((yolo_output1[4][0], yolo_output2[4][0], yolo_output3[4][0]))
-        pred_conf_true = torch.cat((yolo_output1[4][2], yolo_output2[4][2], yolo_output3[4][2]))
-        pred_cls = torch.cat((yolo_output1[5][0], yolo_output2[5][0], yolo_output3[5][0]))
+            # targets
+            t_x = output[0][1]
+            t_y = output[1][1]
+            t_w = output[2][1]
+            t_h = output[3][1]
+            t_conf = output[4][1]
+            t_cls = output[5][1]
 
-        # targets
-        t_x = torch.cat((yolo_output1[0][1], yolo_output2[0][1], yolo_output3[0][1]))
-        t_y = torch.cat((yolo_output1[1][1], yolo_output2[1][1], yolo_output3[1][1]))
-        t_w = torch.cat((yolo_output1[2][1], yolo_output2[2][1], yolo_output3[2][1]))
-        t_h = torch.cat((yolo_output1[3][1], yolo_output2[3][1], yolo_output3[3][1]))
-        t_conf_false = torch.cat((yolo_output1[4][1], yolo_output2[4][1], yolo_output3[4][1]))
-        t_conf_true = torch.cat((yolo_output1[4][3], yolo_output2[4][3], yolo_output3[4][3]))
-        t_cls = torch.cat((yolo_output1[5][1], yolo_output2[5][1], yolo_output3[5][1]))
+            # loss calculation
+            loss_x += F.mse_loss(input = pred_x, target = t_x, reduction = "sum")
+            loss_y += F.mse_loss(input = pred_y, target = t_y, reduction = "sum")
+            loss_w += F.mse_loss(input = pred_w, target = t_w, reduction = "sum")
+            loss_h += F.mse_loss(input = pred_h, target = t_h, reduction = "sum")
+            loss_conf += F.binary_cross_entropy(input = pred_conf, target = t_conf, reduction = "sum")
+            loss_cls += F.cross_entropy(input = pred_cls, target = t_cls, reduction = "sum")
 
-        x_loss = mse_loss(pred_x, t_x)
-        y_loss = mse_loss(pred_y, t_y)
-        w_loss = mse_loss(pred_w, t_w)
-        h_loss = mse_loss(pred_h, t_h)
-        conf_loss = 10 * bce_loss(pred_conf_false, t_conf_false) \
-                    + bce_loss(pred_conf_true, t_conf_true)
-        cls_loss = ce_loss(pred_cls, t_cls)
-
-        total_loss = x_loss + y_loss + w_loss + h_loss + conf_loss + cls_loss
+        loss += loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
 
         return (
-            total_loss,
-            x_loss,
-            y_loss,
-            w_loss,
-            h_loss,
-            conf_loss,
-            cls_loss,
+            loss,
+            loss_x,
+            loss_y,
+            loss_w,
+            loss_h,
+            loss_conf,
+            loss_cls
         )
 
     def forward(self, input1, input2, input3, targets = None):
@@ -404,7 +400,7 @@ class YoloHead(nn.Module):
             yolo_output2 = self.yolo2(x10, targets)
             yolo_output3 = self.yolo3(x18, targets)
 
-            losses = self.yolo_loss(yolo_output1, yolo_output2, yolo_output3)
+            losses = self.yolo_loss([yolo_output1, yolo_output2, yolo_output3])
 
             # for precision and recall
             nGT = yolo_output1[6] + yolo_output2[6] + yolo_output3[6]

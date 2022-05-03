@@ -146,44 +146,6 @@ def build_targets(pred_boxes, pred_conf, pred_classes, target, all_anchors, anch
 
     return nGT, nCorrect, mask, conf_mask, tbox, tconf, tcls
 
-class CIoULoss(nn.Module):
-    def __init__(self):
-        super(CIoULoss, self).__init__()
-    
-    def forward(self, b1, b2):
-        # central point coordinates + width and height
-        b1_xc, b1_yc, b1_w, b1_h = b1[:, 0], b1[:, 1], b1[:, 2], b1[:, 3]
-        b2_xc, b2_yc, b2_w, b2_h = b2[:, 0], b2[:, 1], b2[:, 2], b2[:, 3]
-        
-        # corner point coordinates
-        b1_x1, b1_y1 = b1_xc - b1_w / 2, b1_yc - b1_h / 2
-        b1_x2, b1_y2 = b1_xc + b1_w / 2, b1_yc + b1_h / 2
-        b2_x1, b2_y1 = b2_xc - b2_w / 2, b2_yc - b2_h / 2
-        b2_x2, b2_y2 = b2_xc + b2_w / 2, b2_yc + b2_h / 2
-
-        # iou
-        iou = bbox_iou(b1, b2, x1y1x2y2 = False)
-
-        # rho is the distance between the central points of the two boxes
-        rho_squared = (b2_xc - b1_xc) ** 2 + (b2_yc - b1_yc) ** 2
-        
-        # c is the diagonal length of the smallest enclosing box covering two boxes
-        x_top_left = torch.minimum(b1_x1, b2_x1)
-        y_top_left = torch.minimum(b1_y1, b2_y1)
-        x_bottom_right = torch.maximum(b1_x2, b2_x2)
-        y_bottom_right = torch.maximum(b1_y2, b2_y2)
-        c_squared = (x_bottom_right - x_top_left) ** 2 + (y_bottom_right - y_top_left) ** 2
-
-        # v measures the consistency of aspect ratio
-        v = 4 / (pi ** 2) * (torch.arctan(b1_w / b1_h) - torch.arctan(b2_w / b2_h)) ** 2
-
-        # alpha is a positive trade-off parameter
-        alpha = v / (1 - iou + v)
-
-        # CIoU loss function
-        loss = 1 - iou + rho_squared / c_squared + alpha * v
-
-        return torch.mean(loss)
 
 def print_losses(dataloader, losses, epoch, num_epochs):
     print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
@@ -212,6 +174,7 @@ def progress(value, max=100):
             {value}
         </progress>
     """.format(value=value, max=max))
+
 
 def non_max_suppression(prediction, num_classes, conf_thres = 0.5, nms_thres = 0.4):
     # From (center x, center y, width, height) to (x1, y1, x2, y2)

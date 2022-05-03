@@ -1,13 +1,17 @@
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from util import progress, print_losses
 from modules import Yolo
 import numpy as np
 from IPython.display import display
 
+
 def init_model(num_classes, anchors, using_cuda):
     device = torch.device("cuda" if using_cuda else "cpu")
     model = Yolo(anchors, num_classes).to(device)
     return model
+
 
 def train(model, dataloader, using_cuda, lr = 0.001, num_epochs = 15):
     # set to training mode
@@ -40,6 +44,7 @@ def train(model, dataloader, using_cuda, lr = 0.001, num_epochs = 15):
                 bar.update(progress(i + 1, len(dataloader)))
 
         print_losses(dataloader, losses, epoch, num_epochs)
+
 
 def save(model, path):
     torch.save(model.state_dict(), path)
