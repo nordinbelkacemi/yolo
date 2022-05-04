@@ -253,8 +253,8 @@ class YoloLoss(nn.Module):
 
             # add num_labels, num_proposals, and num_correct to their respective totals
             num_labels_total += num_labels
-            num_proposals += num_proposals
-            num_correct += num_correct
+            num_proposals_total += num_proposals
+            num_correct_total += num_correct
 
         loss = loss_xy + loss_wh + loss_obj + loss_cls
 
@@ -318,7 +318,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             if (i + 1) % steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f, nGT %d, nP %d, nC %d"
+                print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_obj %.2f, loss_cls %.2f, loss_l2 %.2f, truth boxes %d, proposals %d, correct %d"
                     % (
                         losses_batch[0],
                         losses_batch[1],
@@ -333,6 +333,9 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
                 )
 
                 running_losses += losses_batch
+                num_labels_epoch += num_labels_batch
+                num_proposals_epoch += num_proposals_batch
+                num_correct_epoch += num_correct_batch
             
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
