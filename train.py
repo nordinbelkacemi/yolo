@@ -258,7 +258,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
     bar = display(progress(0, len(dataloader)), display_id = True)
 
     # loss criterion
-    criterion = YoloLoss(num_classes = num_classes, batch_size = batch_size, num_anchors = 3, device = device)
+    criterion = YoloLoss(num_classes = num_classes, batch_size = minibatch_size, num_anchors = 3, device = device)
 
     steps = batch_size // minibatch_size
     # training loop
