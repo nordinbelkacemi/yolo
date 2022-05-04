@@ -1,209 +1,165 @@
-import math
 import torch
 from torch import nn
-from util import build_targets
+import numpy as np
 
 
-def bboxes_iou(bboxes_a, bboxes_b, xyxy=True, GIoU=False, DIoU=False, CIoU=False):
-    """Calculate the Intersection of Unions (IoUs) between bounding boxes.
-    IoU is calculated as a ratio of area of the intersection
-    and area of the union.
-    Args:
-        bbox_a (array): An array whose shape is :math:`(N, 4)`.
-            :math:`N` is the number of bounding boxes.
-            The dtype should be :obj:`numpy.float32`.
-        bbox_b (array): An array similar to :obj:`bbox_a`,
-            whose shape is :math:`(K, 4)`.
-            The dtype should be :obj:`numpy.float32`.
-    Returns:
-        array:
-        An array whose shape is :math:`(N, K)`. \
-        An element at index :math:`(n, k)` contains IoUs between \
-        :math:`n` th bounding box in :obj:`bbox_a` and :math:`k` th bounding \
-        box in :obj:`bbox_b`.
-    from: https://github.com/chainer/chainercv
-    https://github.com/ultralytics/yolov3/blob/eca5b9c1d36e4f73bf2f94e141d864f1c2739e23/utils/utils.py#L262-L282
-    """
-    if bboxes_a.shape[1] != 4 or bboxes_b.shape[1] != 4:
-        raise IndexError
+def yolo_forward_dynamic(output, num_classes, anchors, num_anchors, scale_x_y):
+    bxy_list = []
+    bwh_list = []
+    det_confs_list = []
+    cls_confs_list = []
 
-    if xyxy:
-        # intersection top left
-        tl = torch.max(bboxes_a[:, None, :2], bboxes_b[:, :2])
-        # intersection bottom right
-        br = torch.min(bboxes_a[:, None, 2:], bboxes_b[:, 2:])
-        # convex (smallest enclosing box) top left and bottom right
-        con_tl = torch.min(bboxes_a[:, None, :2], bboxes_b[:, :2])
-        con_br = torch.max(bboxes_a[:, None, 2:], bboxes_b[:, 2:])
-        # centerpoint distance squared
-        rho2 = ((bboxes_a[:, None, 0] + bboxes_a[:, None, 2]) - (bboxes_b[:, 0] + bboxes_b[:, 2])) ** 2 / 4 + (
-            (bboxes_a[:, None, 1] + bboxes_a[:, None, 3]) - (bboxes_b[:, 1] + bboxes_b[:, 3])) ** 2 / 4
+    for i in range(num_anchors):
+        begin = i * (5 + num_classes)
+        end = (i + 1) * (5 + num_classes)
 
-        w1 = bboxes_a[:, 2] - bboxes_a[:, 0]
-        h1 = bboxes_a[:, 3] - bboxes_a[:, 1]
-        w2 = bboxes_b[:, 2] - bboxes_b[:, 0]
-        h2 = bboxes_b[:, 3] - bboxes_b[:, 1]
+        bxy_list.append(output[:, begin: begin + 2])
+        bwh_list.append(output[:, begin + 2: begin + 4])
+        det_confs_list.append(output[:, begin + 4: begin + 5])
+        cls_confs_list.append(output[:, begin + 5: end])
 
-        area_a = torch.prod(bboxes_a[:, 2:] - bboxes_a[:, :2], 1)
-        area_b = torch.prod(bboxes_b[:, 2:] - bboxes_b[:, :2], 1)
-    else:
-        # intersection top left
-        tl = torch.max((bboxes_a[:, None, :2] - bboxes_a[:, None, 2:] / 2),
-                       (bboxes_b[:, :2] - bboxes_b[:, 2:] / 2))
-        # intersection bottom right
-        br = torch.min((bboxes_a[:, None, :2] + bboxes_a[:, None, 2:] / 2),
-                       (bboxes_b[:, :2] + bboxes_b[:, 2:] / 2))
+    # Shape: [batch, num_anchors * 2, H, W]
+    bxy = torch.cat(bxy_list, dim = 1)
+    # Shape: [batch, num_anchors * 2, H, W]
+    bwh = torch.cat(bwh_list, dim = 1)
 
-        # convex (smallest enclosing box) top left and bottom right
-        con_tl = torch.min((bboxes_a[:, None, :2] - bboxes_a[:, None, 2:] / 2),
-                           (bboxes_b[:, :2] - bboxes_b[:, 2:] / 2))
-        con_br = torch.max((bboxes_a[:, None, :2] + bboxes_a[:, None, 2:] / 2),
-                           (bboxes_b[:, :2] + bboxes_b[:, 2:] / 2))
-        # centerpoint distance squared
-        rho2 = ((bboxes_a[:, None, :2] - bboxes_b[:, :2]) ** 2 / 4).sum(dim=-1)
+    # Shape: [batch, num_anchors, H, W]
+    det_confs = torch.cat(det_confs_list, dim = 1)
+    # Shape: [batch, num_anchors * H * W]
+    det_confs = det_confs.view(output.size(0), num_anchors * output.size(2) * output.size(3))
 
-        w1 = bboxes_a[:, 2]
-        h1 = bboxes_a[:, 3]
-        w2 = bboxes_b[:, 2]
-        h2 = bboxes_b[:, 3]
+    # Shape: [batch, num_anchors * num_classes, H, W]
+    cls_confs = torch.cat(cls_confs_list, dim = 1)
+    # Shape: [batch, num_anchors, num_classes, H * W]
+    cls_confs = cls_confs.view(output.size(0), num_anchors, num_classes, output.size(2) * output.size(3))
+    # Shape: [batch, num_anchors, num_classes, H * W] --> [batch, num_anchors * H * W, num_classes]
+    cls_confs = cls_confs.permute(0, 1, 3, 2).reshape(output.size(0), num_anchors * output.size(2) * output.size(3), num_classes)
 
-        area_a = torch.prod(bboxes_a[:, 2:], 1)
-        area_b = torch.prod(bboxes_b[:, 2:], 1)
-    en = (tl < br).type(tl.type()).prod(dim=2)
-    area_i = torch.prod(br - tl, 2) * en  # * ((tl < br).all())
-    area_u = area_a[:, None] + area_b - area_i
-    iou = area_i / area_u
+    # Apply sigmoid(), exp() and softmax() to slices
+    #
+    bxy = torch.sigmoid(bxy) * scale_x_y - 0.5 * (scale_x_y - 1)
+    bwh = torch.exp(bwh)
+    det_confs = torch.sigmoid(det_confs)
+    cls_confs = torch.sigmoid(cls_confs)
 
-    if GIoU or DIoU or CIoU:
-        if GIoU:  # Generalized IoU https://arxiv.org/pdf/1902.09630.pdf
-            area_c = torch.prod(con_br - con_tl, 2)  # convex area
-            return iou - (area_c - area_u) / area_c  # GIoU
-        if DIoU or CIoU:  # Distance or Complete IoU https://arxiv.org/abs/1911.08287v1
-            # convex diagonal squared
-            c2 = torch.pow(con_br - con_tl, 2).sum(dim=2) + 1e-16
-            if DIoU:
-                return iou - rho2 / c2  # DIoU
-            elif CIoU:  # https://github.com/Zzh-tju/DIoU-SSD-pytorch/blob/master/utils/box/box_utils.py#L47
-                v = (4 / math.pi ** 2) * torch.pow(torch.atan(w1 /
-                                                              h1).unsqueeze(1) - torch.atan(w2 / h2), 2)
-                with torch.no_grad():
-                    alpha = v / (1 - iou + v)
-                return iou - (rho2 / c2 + v * alpha)  # CIoU
-    return iou
+    # Prepare C-x, C-y, P-w, P-h (None of them are torch related)
+    grid_x = np.expand_dims(np.expand_dims(np.expand_dims(np.linspace(0, output.size(3) - 1, output.size(3)), axis = 0).repeat(output.size(2), 0), axis = 0), axis = 0)
+    grid_y = np.expand_dims(np.expand_dims(np.expand_dims(np.linspace(0, output.size(2) - 1, output.size(2)), axis = 1).repeat(output.size(3), 1), axis = 0), axis = 0)
 
+    anchor_w = []
+    anchor_h = []
+    for i in range(num_anchors):
+        anchor_w.append(anchors[i * 2])
+        anchor_h.append(anchors[i * 2 + 1])
 
-img_dim = (384, 512)
+    device = None
+    cuda_check = output.is_cuda
+    if cuda_check:
+        device = output.get_device()
+
+    bx_list = []
+    by_list = []
+    bw_list = []
+    bh_list = []
+
+    # Apply C-x, C-y, P-w, P-h
+    for i in range(num_anchors):
+        ii = i * 2
+        # Shape: [batch, 1, H, W]
+        # grid_x.to(device=device, dtype=torch.float32)
+        bx = bxy[:, ii: ii + 1] + torch.tensor(grid_x, device=device, dtype = torch.float32)
+        # Shape: [batch, 1, H, W]
+        # grid_y.to(device=device, dtype=torch.float32)
+        by = bxy[:, ii + 1: ii + 2] + torch.tensor(grid_y, device=device, dtype = torch.float32)
+        # Shape: [batch, 1, H, W]
+        bw = bwh[:, ii: ii + 1] * anchor_w[i]
+        # Shape: [batch, 1, H, W]
+        bh = bwh[:, ii + 1: ii + 2] * anchor_h[i]
+
+        bx_list.append(bx)
+        by_list.append(by)
+        bw_list.append(bw)
+        bh_list.append(bh)
+
+    ########################################
+    #   Figure out bboxes from slices     #
+    ########################################
+
+    # Shape: [batch, num_anchors, H, W]
+    bx = torch.cat(bx_list, dim = 1)
+    # Shape: [batch, num_anchors, H, W]
+    by = torch.cat(by_list, dim = 1)
+    # Shape: [batch, num_anchors, H, W]
+    bw = torch.cat(bw_list, dim = 1)
+    # Shape: [batch, num_anchors, H, W]
+    bh = torch.cat(bh_list, dim = 1)
+
+    # Shape: [batch, 2 * num_anchors, H, W]
+    bx_bw = torch.cat((bx, bw), dim = 1)
+    # Shape: [batch, 2 * num_anchors, H, W]
+    by_bh = torch.cat((by, bh), dim = 1)
+
+    # normalize coordinates to [0, 1]
+    bx_bw /= output.size(3)
+    by_bh /= output.size(2)
+
+    # Shape: [batch, num_anchors * H * W, 1]
+    bx = bx_bw[:, :num_anchors].view(output.size(0), num_anchors * output.size(2) * output.size(3), 1)
+    by = by_bh[:, :num_anchors].view(output.size(0), num_anchors * output.size(2) * output.size(3), 1)
+    bw = bx_bw[:, num_anchors:].view(output.size(0), num_anchors * output.size(2) * output.size(3), 1)
+    bh = by_bh[:, num_anchors:].view(output.size(0), num_anchors * output.size(2) * output.size(3), 1)
+
+    bx1 = bx - bw * 0.5
+    by1 = by - bh * 0.5
+    bx2 = bx1 + bw
+    by2 = by1 + bh
+
+    # Shape: [batch, num_anchors * h * w, 4] -> [batch, num_anchors * h * w, 1, 4]
+    boxes = torch.cat((bx1, by1, bx2, by2), dim = 2).view(
+        output.size(0), num_anchors * output.size(2) * output.size(3), 1, 4)
+    # boxes = boxes.repeat(1, 1, num_classes, 1)
+
+    # boxes:     [batch, num_anchors * H * W, 1, 4]
+    # cls_confs: [batch, num_anchors * H * W, num_classes]
+    # det_confs: [batch, num_anchors * H * W]
+
+    det_confs = det_confs.view(output.size(0), num_anchors * output.size(2) * output.size(3), 1)
+    confs = cls_confs * det_confs
+
+    # boxes: [batch, num_anchors * H * W, 1, 4]
+    # confs: [batch, num_anchors * H * W, num_classes]
+
+    return boxes, confs
+
 
 
 class YoloLayer(nn.Module):
     """Detection layer"""
-    def __init__(self, all_anchors, anchor_mask, num_classes):
+    def __init__(self, anchor_mask = [], num_classes = 0, anchors = [], num_anchors = 1, stride = 32, model_out = False):
         super(YoloLayer, self).__init__()
-        self.all_anchors = all_anchors
         self.anchor_mask = anchor_mask
-        self.anchors = all_anchors[anchor_mask[0]:anchor_mask[-1] + 1]
         self.num_classes = num_classes
-        self.bbox_attrs = 5 + num_classes
-        self.image_dim = img_dim # (H, W)
-        self.ignore_thres = 0.5
-        self.lambda_coord = 1
+        self.anchors = anchors
+        self.num_anchors = num_anchors
+        self.anchor_step = len(anchors) // num_anchors
+        self.coord_scale = 1
+        self.noobject_scale = 1
+        self.object_scale = 5
+        self.class_scale = 1
+        self.thresh = 0.6
+        self.stride = stride
+        self.seen = 0
+        self.scale_x_y = 1
 
-    def forward(self, x, targets = None):
-        nB = x.size(0)
-        nA = len(self.anchors)
-        nGy = x.size(2)
-        nGx = x.size(3)
+        self.model_out = model_out
 
-        # height (and also width) of a grid cell in pixels
-        stride = self.image_dim[0] / nGy
+    def forward(self, output):
+        if self.training:
+            return output
+        
+        masked_anchors = []
+        for m in self.anchor_mask:
+            masked_anchors += self.anchors[m * self.anchor_step:(m + 1) * self.anchor_step]
+        masked_anchors = [anchor / self.stride for anchor in masked_anchors]
 
-        # Tensors for cuda support
-        FloatTensor = torch.cuda.FloatTensor if x.is_cuda else torch.FloatTensor
-        LongTensor = torch.cuda.LongTensor if x.is_cuda else torch.LongTensor
-        ByteTensor = torch.cuda.ByteTensor if x.is_cuda else torch.ByteTensor
-
-        # Reshape x: [batchSize x nGy x nGx x numAnchors*(5+numClass)] -> [batchSize x numAnchors x nGy x nGx x (5+numClass)]
-        prediction = x.view(nB, nA, self.bbox_attrs, nGy, nGx).permute(0, 1, 3, 4, 2).contiguous()
-
-        # Get outputs
-        x = torch.sigmoid(prediction[..., 0])  # Center x
-        y = torch.sigmoid(prediction[..., 1])  # Center y
-        w = prediction[..., 2]  # Width
-        h = prediction[..., 3]  # Height
-        pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
-        pred_class = prediction[..., 5:]  # Class
-
-        # Calculate offsets for each grid
-        grid_x = torch.arange(nGx).repeat(nGy, 1).view(
-            [1, 1, nGy, nGx]).type(FloatTensor)
-        grid_y = torch.arange(nGy).repeat(nGx, 1).t().view(
-            [1, 1, nGy, nGx]).type(FloatTensor)
-
-        all_scaled_anchors = FloatTensor([(a_w / stride, a_h / stride) for a_w, a_h in self.all_anchors])
-        scaled_anchors = FloatTensor([(a_w / stride, a_h / stride) for a_w, a_h in self.anchors])
-        anchor_w = scaled_anchors[:, 0:1].view((1, nA, 1, 1))
-        anchor_h = scaled_anchors[:, 1:2].view((1, nA, 1, 1))
-
-        # Add offset and scale with anchors
-        pred_boxes = FloatTensor(prediction[..., :4].shape)
-        pred_boxes[..., 0] = x.detach() + grid_x
-        pred_boxes[..., 1] = y.detach() + grid_y
-        pred_boxes[..., 2] = torch.exp(w.detach()) * anchor_w
-        pred_boxes[..., 3] = torch.exp(h.detach()) * anchor_h
-
-        # Training
-        if targets is not None:
-            if x.is_cuda:
-                # self.ciou_loss = self.ciou_loss.cuda()
-                self.mse_loss = self.mse_loss.cuda()
-                self.bce_loss = self.bce_loss.cuda()
-                self.ce_loss = self.ce_loss.cuda()
-
-            nGT, nCorrect, mask, conf_mask, tbox, tconf, tcls = build_targets(
-                pred_boxes = pred_boxes.cpu().detach(),
-                pred_conf = pred_conf.cpu().detach(),
-                pred_classes = pred_class.cpu().detach(),
-                target = targets.cpu().detach(),
-                all_anchors = all_scaled_anchors.cpu().detach(),
-                anchors = scaled_anchors.cpu().detach(),
-                anchor_mask = self.anchor_mask,
-                grid_size_y = nGy,
-                grid_size_x = nGx,
-                ignore_thres = self.ignore_thres,
-            )
-
-            nProposals = int((pred_conf > 0.5).sum().item())
-
-            # Handle masks
-            mask = mask.type(ByteTensor).bool()
-            conf_mask = conf_mask.type(ByteTensor).bool()
-
-            # Handle target variables
-            tbox = tbox.type(FloatTensor)
-            tconf = tconf.type(FloatTensor)
-            tcls = tcls.type(LongTensor)
-
-            # Get conf mask where gt and where there is no gt
-            conf_mask_true = mask
-
-            return (
-                (x[mask], tbox[mask][:, 0]),
-                (y[mask], tbox[mask][:, 1]),
-                (w[mask], tbox[mask][:, 2]),
-                (h[mask], tbox[mask][:, 3]),
-                (pred_conf[conf_mask_true], tconf[conf_mask_true]),
-                (pred_class[mask], tcls[mask]),
-                nGT,
-                nProposals,
-                nCorrect
-            )
-
-        else:
-            # If not in training phase return predictions
-            output = torch.cat((
-                pred_boxes.view(nB, -1, 4) * stride,
-                pred_conf.view(nB, -1, 1),
-                pred_class.view(nB, -1, self.num_classes)
-            ), -1)
-
-        return output
+        return yolo_forward_dynamic(output, self.num_classes, masked_anchors, len(self.anchor_mask), scale_x_y = self.scale_x_y)
