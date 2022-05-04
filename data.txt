@@ -1,0 +1,15 @@
+[ Epoch 1/15 ]	Losses: loss 1823.131535, loss_xy 7.737938, loss_wh 1.240645, loss_obj 1809.393924, loss_cls 4.759009, loss_l2 413.596294
+[ Epoch 2/15 ]	Losses: loss 158.751662, loss_xy 7.417720, loss_wh 0.543680, loss_obj 147.089611, loss_cls 3.700652, loss_l2 7.473235
+[ Epoch 3/15 ]	Losses: loss 80.666176, loss_xy 7.098107, loss_wh 0.510545, loss_obj 69.711009, loss_cls 3.346516, loss_l2 5.418031
+[ Epoch 4/15 ]	Losses: loss 60.075915, loss_xy 7.378174, loss_wh 0.535386, loss_obj 48.790856, loss_cls 3.371498, loss_l2 5.382532
+[ Epoch 5/15 ]	Losses: loss 46.563632, loss_xy 6.447992, loss_wh 0.455979, loss_obj 36.731306, loss_cls 2.928355, loss_l2 4.609683
+[ Epoch 6/15 ]	Losses: loss 41.045828, loss_xy 6.463134, loss_wh 0.412655, loss_obj 31.286346, loss_cls 2.883693, loss_l2 4.486104
+[ Epoch 7/15 ]	Losses: loss 39.225680, loss_xy 6.803690, loss_wh 0.484132, loss_obj 28.799615, loss_cls 3.138244, loss_l2 4.87682
+[ Epoch 8/15 ]	Losses: loss 39.696031, loss_xy 7.571363, loss_wh 0.551436, loss_obj 28.276089, loss_cls 3.297143, loss_l2 5.366213
+[ Epoch 9/15 ]	Losses: loss 37.865381, loss_xy 7.557158, loss_wh 0.519628, loss_obj 26.442697, loss_cls 3.345898, loss_l2 5.298660
+[ Epoch 10/15 ]	Losses: loss 32.032275, loss_xy 6.496976, loss_wh 0.400486, loss_obj 22.278510, loss_cls 2.856303, loss_l2 4.453938
+[ Epoch 11/15 ]	Losses: loss 31.353654, loss_xy 6.795544, loss_wh 0.439125, loss_obj 21.266015, loss_cls 2.852969, loss_l2 4.617230
+[ Epoch 12/15 ]	Losses: loss 29.843969, loss_xy 7.084767, loss_wh 0.377992, loss_obj 19.948164, loss_cls 2.433047, loss_l2 4.425063
+[ Epoch 13/15 ]	Losses: loss 27.774808, loss_xy 7.033312, loss_wh 0.378549, loss_obj 18.282734, loss_cls 2.080213, loss_l2 4.206024
+[ Epoch 14/15 ]	Losses: loss 23.356784, loss_xy 6.525435, loss_wh 0.350851, loss_obj 15.131281, loss_cls 1.349217, loss_l2 3.581458
+[ Epoch 15/15 ]	Losses: loss 22.379671, loss_xy 6.684427, loss_wh 0.334492, loss_obj 14.085507, loss_cls 1.275245, loss_l2 3.449552

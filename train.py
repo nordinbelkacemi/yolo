@@ -139,9 +139,6 @@ class YoloLoss(nn.Module):
         tgt_scale = torch.zeros(batch_size, self.n_anchors, fsize, fsize, 2).to(self.device)
         target = torch.zeros(batch_size, self.n_anchors, fsize, fsize, num_ch).to(self.device)
 
-        # labels = labels.cpu().data
-        nlabel = (labels.sum(dim = 2) > 0).sum(dim = 1)  # number of objects
-
         truth_x_all = (labels[:, :, 2] + labels[:, :, 0]) / (self.strides[output_id] * 2)
         truth_y_all = (labels[:, :, 3] + labels[:, :, 1]) / (self.strides[output_id] * 2)
         truth_w_all = (labels[:, :, 2] - labels[:, :, 0]) / self.strides[output_id]
@@ -149,8 +146,15 @@ class YoloLoss(nn.Module):
         truth_i_all = truth_x_all.to(torch.int16).cpu().numpy()
         truth_j_all = truth_y_all.to(torch.int16).cpu().numpy()
 
+        # if there are 6 labels on the first image and 2 of those labels are small and the output_id
+        # corresponds to the small object detector's id, then num_labels_total[0] = 6 and after the
+        # for loop, num_labels = 2
+        num_labels_total = (labels.sum(dim = 2) > 0).sum(dim = 1)  # number of objects
+        num_labels = 0
+        num_proposals = (pred[..., 4] > 0.5).sum().item()
+        num_correct = 0
         for b in range(batch_size):
-            n = int(nlabel[b])
+            n = int(num_labels_total[b])
             if n == 0:
                 continue
             truth_box = torch.zeros(n, 4).to(self.device)
@@ -169,17 +173,19 @@ class YoloLoss(nn.Module):
             best_n_mask = ((best_n_all == self.anch_masks[output_id][0]) |
                            (best_n_all == self.anch_masks[output_id][1]) |
                            (best_n_all == self.anch_masks[output_id][2]))
-
-            if sum(best_n_mask) == 0:
+            
+            num_labels_img = best_n_mask.sum().item()
+            num_labels += num_labels_img
+            if num_labels == 0:
                 continue
 
             truth_box[:n, 0] = truth_x_all[b, :n]
             truth_box[:n, 1] = truth_y_all[b, :n]
 
-            pred_ious = bboxes_iou(pred[b].view(-1, 4), truth_box, xyxy = False)
+            pred_ious = bboxes_iou(pred[b, ..., :4].view(-1, 4), truth_box, xyxy = False)
             pred_best_iou, _ = pred_ious.max(dim = 1)
             pred_best_iou = (pred_best_iou > self.ignore_thre)
-            pred_best_iou = pred_best_iou.view(pred[b].shape[:3])
+            pred_best_iou = pred_best_iou.view(pred[b, ..., :4].shape[:3])
             # set mask to zero (ignore) if pred matches truth
             obj_mask[b] = ~ pred_best_iou
 
@@ -199,10 +205,18 @@ class YoloLoss(nn.Module):
                     target[b, a, j, i, 5 + labels[b, ti, 4].to(torch.int16).cpu().numpy()] = 1
                     tgt_scale[b, a, j, i, :] = torch.sqrt(2 - truth_w_all[b, ti] * truth_h_all[b, ti] / fsize / fsize)
 
-        return obj_mask, tgt_mask, tgt_scale, target
+                    ciou = bboxes_iou(truth_box[ti].unsqueeze(0), pred[b, a, j, i, :4].unsqueeze(0), CIoU = True)
+                    obj_score = pred[b, a, j, i, 4]
+                    pred_cls = torch.argmax(pred[b, a, j, i, 5:])
+                    t_cls = labels[b, ti, 4]
+                    if ciou > 0.5 and obj_score > 0.5 and pred_cls == t_cls:
+                        num_correct += 1
+
+        return obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct
 
     def forward(self, xin, labels = None):
         loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = 0, 0, 0, 0, 0, 0
+        num_labels_total, num_proposals_total, num_correct_total = 0, 0, 0
         for output_id, output in enumerate(xin):
             batch_size = output.shape[0]
             fsize = output.shape[2]
@@ -214,13 +228,13 @@ class YoloLoss(nn.Module):
             # logistic activation for xy, obj, cls
             output[..., np.r_[:2, 4:num_ch]] = torch.sigmoid(output[..., np.r_[:2, 4:num_ch]])
 
-            pred = output[..., :4].clone()
+            pred = output.clone()
             pred[..., 0] += self.grid_x[output_id]
             pred[..., 1] += self.grid_y[output_id]
             pred[..., 2] = torch.exp(pred[..., 2]) * self.anchor_w[output_id]
             pred[..., 3] = torch.exp(pred[..., 3]) * self.anchor_h[output_id]
 
-            obj_mask, tgt_mask, tgt_scale, target = self.build_target(pred, labels, batch_size, fsize, num_ch, output_id)
+            obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct = self.build_target(pred, labels, batch_size, fsize, num_ch, output_id)
 
             # loss calculation
             output[..., 4] *= obj_mask
@@ -237,9 +251,14 @@ class YoloLoss(nn.Module):
             loss_cls += F.binary_cross_entropy(input = output[..., 5:], target = target[..., 5:], reduction = "sum")
             loss_l2 += F.mse_loss(input = output, target = target, reduction = "sum")
 
+            # add num_labels, num_proposals, and num_correct to their respective totals
+            num_labels_total += num_labels
+            num_proposals += num_proposals
+            num_correct += num_correct
+
         loss = loss_xy + loss_wh + loss_obj + loss_cls
 
-        return loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2
+        return loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2, num_labels_total, num_proposals_total, num_correct_total
 
 
 def init_model(num_classes, device):
@@ -265,6 +284,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
     for epoch in range(num_epochs):
         # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
         running_losses = np.zeros(6)
+        num_labels_epoch, num_proposals_epoch, num_correct_epoch = 0, 0, 0
 
         optimizer.zero_grad()
         for i, (_, imgs, targets) in enumerate(dataloader):
@@ -273,13 +293,11 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             targets.requires_grad = False
 
             losses_batch = np.zeros(6)
+            num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
             
             prediction = model(imgs, targets)
-            loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(prediction, targets)
+            loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets)
             loss.backward()
-            if (i + 1) % steps == 0:
-                optimizer.step()
-                optimizer.zero_grad()
             
             losses_minibatch = np.array([
                 loss.cpu().detach().item(),
@@ -290,17 +308,27 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
                 loss_l2.cpu().detach().item()
             ])
 
+            # accumulate losses
             losses_batch += losses_minibatch
+            # accumulate num_labels, num_proposals and num_correct
+            num_labels_batch += num_labels_minibatch
+            num_proposals_batch += num_proposals_minibatch
+            num_correct_batch += num_correct_minibatch
 
             if (i + 1) % steps == 0:
-                print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f"
+                optimizer.step()
+                optimizer.zero_grad()
+                print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f, nGT %d, nP %d, nC %d"
                     % (
                         losses_batch[0],
                         losses_batch[1],
                         losses_batch[2],
                         losses_batch[3],
                         losses_batch[4],
-                        losses_batch[5]
+                        losses_batch[5],
+                        num_labels_batch,
+                        num_proposals_batch,
+                        num_correct_batch
                     )
                 )
 
@@ -309,15 +337,20 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
 
+        num_batches = len(dataloader) * minibatch_size / batch_size
+        recall = num_correct_epoch / num_labels_epoch
+        precision = num_correct_epoch / num_proposals_epoch
         print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
-        print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f"
+        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_obj %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f, precision: %.2f"
             % (
-                running_losses[0] / float(len(dataloader)),
-                running_losses[1] / float(len(dataloader)),
-                running_losses[2] / float(len(dataloader)),
-                running_losses[3] / float(len(dataloader)),
-                running_losses[4] / float(len(dataloader)),
-                running_losses[5] / float(len(dataloader)),
+                running_losses[0] / num_batches,
+                running_losses[1] / num_batches,
+                running_losses[2] / num_batches,
+                running_losses[3] / num_batches,
+                running_losses[4] / num_batches,
+                running_losses[5] / num_batches,
+                recall * 100,
+                precision * 100
             )
         )
 
