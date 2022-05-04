@@ -247,7 +247,7 @@ def init_model(num_classes, device):
     return model
 
 
-def train(model, device, dataloader, num_classes, batch_size, lr = 0.001, num_epochs = 15):
+def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr = 0.001, num_epochs = 15):
     # set to training mode
     model.train()
 
@@ -260,23 +260,28 @@ def train(model, device, dataloader, num_classes, batch_size, lr = 0.001, num_ep
     # loss criterion
     criterion = YoloLoss(num_classes = num_classes, batch_size = batch_size, num_anchors = 3, device = device)
 
+    steps = batch_size // minibatch_size
     # training loop
     for epoch in range(num_epochs):
         # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
         running_losses = np.zeros(6)
 
+        optimizer.zero_grad()
         for i, (_, imgs, targets) in enumerate(dataloader):
             imgs = imgs.to(device)
             targets = targets.to(device)
             targets.requires_grad = False
 
-            optimizer.zero_grad()
+            losses_batch = np.zeros(6)
+            
             prediction = model(imgs, targets)
             loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = criterion(prediction, targets)
             loss.backward()
-            optimizer.step()
+            if (i + 1) % steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             
-            losses = np.array([
+            losses_minibatch = np.array([
                 loss.cpu().detach().item(),
                 loss_xy.cpu().detach().item(),
                 loss_wh.cpu().detach().item(),
@@ -285,18 +290,21 @@ def train(model, device, dataloader, num_classes, batch_size, lr = 0.001, num_ep
                 loss_l2.cpu().detach().item()
             ])
 
-            print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f"
-                % (
-                    losses[0],
-                    losses[1],
-                    losses[2],
-                    losses[3],
-                    losses[4],
-                    losses[5]
-                )
-            )
+            losses_batch += losses_minibatch
 
-            running_losses += losses
+            if (i + 1) % steps == 0:
+                print("Losses: loss %f, loss_xy %f, loss_wh %f, loss_obj %f, loss_cls %f, loss_l2 %f"
+                    % (
+                        losses_batch[0],
+                        losses_batch[1],
+                        losses_batch[2],
+                        losses_batch[3],
+                        losses_batch[4],
+                        losses_batch[5]
+                    )
+                )
+
+                running_losses += losses_batch
             
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
