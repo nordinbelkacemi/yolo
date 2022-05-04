@@ -341,8 +341,8 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
                 bar.update(progress(i + 1, len(dataloader)))
 
         num_batches = len(dataloader) * minibatch_size / batch_size
-        recall = num_correct_epoch / num_labels_epoch
-        precision = num_correct_epoch / num_proposals_epoch
+        recall = num_correct_epoch / num_labels_epoch if num_labels_epoch else 1
+        precision = num_correct_epoch / num_proposals_epoch if num_proposals_epoch else 0
         print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
         print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_obj %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f, precision: %.2f"
             % (
