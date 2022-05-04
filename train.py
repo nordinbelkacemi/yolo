@@ -247,7 +247,7 @@ def init_model(num_classes, device):
     return model
 
 
-def train(model, device, dataloader, num_classes, batch_size, using_cuda, lr = 0.001, num_epochs = 15):
+def train(model, device, dataloader, num_classes, batch_size, lr = 0.001, num_epochs = 15):
     # set to training mode
     model.train()
 
@@ -266,9 +266,9 @@ def train(model, device, dataloader, num_classes, batch_size, using_cuda, lr = 0
         running_losses = np.zeros(6)
 
         for i, (_, imgs, targets) in enumerate(dataloader):
-            if using_cuda:
-                imgs = imgs.cuda()
-                targets = targets.cuda().requires_grad_(False)
+            imgs = imgs.to(device)
+            targets = targets.to(device)
+            targets.requires_grad = False
 
             optimizer.zero_grad()
             prediction = model(imgs, targets)
