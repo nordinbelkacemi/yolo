@@ -108,8 +108,9 @@ class YoloLoss(nn.Module):
         self.anchors = [[12, 16], [19, 36], [40, 28], [36, 75], [76, 55], [72, 146], [142, 110], [192, 243], [459, 401]]
         self.anch_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
         self.ignore_thre = 0.5
-        self.lambda_noobj = 0.01
-        self.lambda_coord = 1
+        self.lambda_noobj = 0.1
+        self.lambda_obj = 10
+        self.lambda_coord = 5
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
 
@@ -261,7 +262,7 @@ class YoloLoss(nn.Module):
             # confidence loss
             loss_obj = F.binary_cross_entropy(input = output[..., 4][obj_mask], target = target[..., 4][obj_mask], reduction = "sum")
             loss_noobj = F.binary_cross_entropy(input = output[..., 4][noobj_mask], target = target[..., 4][noobj_mask], reduction = "sum")
-            loss_conf += loss_obj + self.lambda_noobj * loss_noobj
+            loss_conf += self.lambda_obj * loss_obj + self.lambda_noobj * loss_noobj
             
             # classification loss
             loss_cls += F.binary_cross_entropy(input = output[..., 5:], target = target[..., 5:], reduction = "sum")
@@ -331,8 +332,6 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             num_labels_batch += num_labels_minibatch
             num_proposals_batch += num_proposals_minibatch
             num_correct_batch += num_correct_minibatch
-
-            print(num_labels_batch)
 
             if (i + 1) % steps == 0:
                 optimizer.step()
