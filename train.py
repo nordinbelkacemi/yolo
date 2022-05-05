@@ -108,6 +108,8 @@ class YoloLoss(nn.Module):
         self.anchors = [[12, 16], [19, 36], [40, 28], [36, 75], [76, 55], [72, 146], [142, 110], [192, 243], [459, 401]]
         self.anch_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
         self.ignore_thre = 0.5
+        self.lambda_noobj = 0.05
+        self.lambda_coord = 1
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
 
@@ -134,8 +136,9 @@ class YoloLoss(nn.Module):
 
     def build_target(self, pred, labels, batch_size, fsize, num_ch, output_id):
         # target assignment
-        tgt_mask = torch.zeros(batch_size, self.n_anchors, fsize, fsize, 4 + self.num_classes).to(device = self.device)
-        obj_mask = torch.ones(batch_size, self.n_anchors, fsize, fsize).to(device = self.device)
+        tgt_mask = torch.zeros(batch_size, self.n_anchors, fsize, fsize, 4 + self.num_classes).to(self.device)
+        noobj_mask = torch.ones(batch_size, self.n_anchors, fsize, fsize).to(self.device)
+        obj_mask = torch.zeros(batch_size, self.n_anchors, fsize, fsize).to(self.device)
         tgt_scale = torch.zeros(batch_size, self.n_anchors, fsize, fsize, 2).to(self.device)
         target = torch.zeros(batch_size, self.n_anchors, fsize, fsize, num_ch).to(self.device)
 
@@ -187,12 +190,15 @@ class YoloLoss(nn.Module):
             pred_best_iou = (pred_best_iou > self.ignore_thre)
             pred_best_iou = pred_best_iou.view(pred[b, ..., :4].shape[:3])
             # set mask to zero (ignore) if pred matches truth
-            obj_mask[b] = ~ pred_best_iou
+            noobj_mask[b] = ~ pred_best_iou
+
+            # conf_mask = 
 
             for ti in range(best_n.shape[0]):
                 if best_n_mask[ti] == 1:
                     i, j = truth_i[ti], truth_j[ti]
                     a = best_n[ti]
+                    noobj_mask[b, a, j, i] = 0
                     obj_mask[b, a, j, i] = 1
                     tgt_mask[b, a, j, i, :] = 1
                     target[b, a, j, i, 0] = truth_x_all[b, ti] - truth_x_all[b, ti].to(torch.int16).to(torch.float)
@@ -212,10 +218,10 @@ class YoloLoss(nn.Module):
                     if ciou > 0.5 and obj_score > 0.5 and pred_cls == t_cls:
                         num_correct += 1
 
-        return obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct
+        return noobj_mask, obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct
 
     def forward(self, xin, labels = None):
-        loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2 = 0, 0, 0, 0, 0, 0
+        loss, loss_xy, loss_wh, loss_conf, loss_cls, loss_l2 = 0, 0, 0, 0, 0, 0
         num_labels_total, num_proposals_total, num_correct_total = 0, 0, 0
         for output_id, output in enumerate(xin):
             batch_size = output.shape[0]
@@ -234,21 +240,35 @@ class YoloLoss(nn.Module):
             pred[..., 2] = torch.exp(pred[..., 2]) * self.anchor_w[output_id]
             pred[..., 3] = torch.exp(pred[..., 3]) * self.anchor_h[output_id]
 
-            obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct = self.build_target(pred, labels, batch_size, fsize, num_ch, output_id)
+            noobj_mask, obj_mask, tgt_mask, tgt_scale, target, num_labels, num_proposals, num_correct = self.build_target(pred, labels, batch_size, fsize, num_ch, output_id)
+
+            noobj_mask = noobj_mask.type(torch.ByteTensor).bool()
+            obj_mask = obj_mask.type(torch.ByteTensor).bool()
 
             # loss calculation
-            output[..., 4] *= obj_mask
+            # output[..., 4] *= noobj_mask
             output[..., np.r_[0:4, 5:num_ch]] *= tgt_mask
             output[..., 2:4] *= tgt_scale
 
-            target[..., 4] *= obj_mask
+            # target[..., 4] *= noobj_mask
             target[..., np.r_[0:4, 5:num_ch]] *= tgt_mask
             target[..., 2:4] *= tgt_scale
 
-            loss_xy += F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], weight = tgt_scale * tgt_scale, reduction = "sum")
-            loss_wh += F.mse_loss(input = output[..., 2:4], target = target[..., 2:4], reduction = "sum") / 2
-            loss_obj += F.binary_cross_entropy(input = output[..., 4], target = target[..., 4], reduction = "sum")
+            # x and y loss
+            loss_xy += self.lambda_coord * F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], weight = tgt_scale * tgt_scale, reduction = "sum")
+
+            # width and height loss 
+            loss_wh += self.lambda_coord * F.mse_loss(input = output[..., 2:4], target = target[..., 2:4], reduction = "sum") / 2
+            
+            # confidence loss
+            loss_obj = F.binary_cross_entropy(input = output[..., 4][obj_mask], target = target[..., 4][noobj_mask], reduction = "sum")
+            loss_noobj = F.binary_cross_entropy(input = output[..., 4][noobj_mask], target = target[..., 4][noobj_mask], reduction = "sum")
+            loss_conf += loss_obj + self.lambda_noobj * loss_noobj
+            
+            # classification loss
             loss_cls += F.binary_cross_entropy(input = output[..., 5:], target = target[..., 5:], reduction = "sum")
+            
+            # l2 loss
             loss_l2 += F.mse_loss(input = output, target = target, reduction = "sum")
 
             # add num_labels, num_proposals, and num_correct to their respective totals
@@ -256,9 +276,9 @@ class YoloLoss(nn.Module):
             num_proposals_total += num_proposals
             num_correct_total += num_correct
 
-        loss = loss_xy + loss_wh + loss_obj + loss_cls
+        loss = loss_xy + loss_wh + loss_conf + loss_cls
 
-        return loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2, num_labels_total, num_proposals_total, num_correct_total
+        return loss, loss_xy, loss_wh, loss_conf, loss_cls, loss_l2, num_labels_total, num_proposals_total, num_correct_total
 
 
 def init_model(num_classes, device):
@@ -296,14 +316,14 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
             
             prediction = model(imgs, targets)
-            loss, loss_xy, loss_wh, loss_obj, loss_cls, loss_l2, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets)
+            loss, loss_xy, loss_wh, loss_conf, loss_cls, loss_l2, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets)
             loss.backward()
             
             losses_minibatch = np.array([
                 loss.cpu().detach().item(),
                 loss_xy.cpu().detach().item(),
                 loss_wh.cpu().detach().item(),
-                loss_obj.cpu().detach().item(),
+                loss_conf.cpu().detach().item(),
                 loss_cls.cpu().detach().item(),
                 loss_l2.cpu().detach().item()
             ])
@@ -318,7 +338,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             if (i + 1) % steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_obj %.2f, loss_cls %.2f, loss_l2 %.2f, truth boxes %d, proposals %d, correct %d"
+                print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, truth boxes %d, proposals %d, correct %d"
                     % (
                         losses_batch[0],
                         losses_batch[1],
@@ -344,7 +364,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
         recall = num_correct_epoch / num_labels_epoch if num_labels_epoch else 1
         precision = num_correct_epoch / num_proposals_epoch if num_proposals_epoch else 0
         print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
-        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_obj %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f, precision: %.2f"
+        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f, precision: %.2f"
             % (
                 running_losses[0] / num_batches,
                 running_losses[1] / num_batches,
