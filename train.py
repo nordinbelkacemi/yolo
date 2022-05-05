@@ -261,7 +261,7 @@ class YoloLoss(nn.Module):
             loss_wh += self.lambda_coord * F.mse_loss(input = output[..., 2:4], target = target[..., 2:4], reduction = "sum") / 2
             
             # confidence loss
-            loss_obj = F.binary_cross_entropy(input = output[..., 4][obj_mask], target = target[..., 4][noobj_mask], reduction = "sum")
+            loss_obj = F.binary_cross_entropy(input = output[..., 4][obj_mask], target = target[..., 4][obj_mask], reduction = "sum")
             loss_noobj = F.binary_cross_entropy(input = output[..., 4][noobj_mask], target = target[..., 4][noobj_mask], reduction = "sum")
             loss_conf += loss_obj + self.lambda_noobj * loss_noobj
             
