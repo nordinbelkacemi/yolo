@@ -2,8 +2,7 @@ __pycache__/
 architechture.pdf
 Finetune/
 .DS_Store
-yolo-test.ipynb
-resize-test.ipynb
+*.ipynb
 main.py
 *.pt
 demo_train.py

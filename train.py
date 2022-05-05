@@ -108,7 +108,7 @@ class YoloLoss(nn.Module):
         self.anchors = [[12, 16], [19, 36], [40, 28], [36, 75], [76, 55], [72, 146], [142, 110], [192, 243], [459, 401]]
         self.anch_masks = [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
         self.ignore_thre = 0.5
-        self.lambda_noobj = 0.001
+        self.lambda_noobj = 0.01
         self.lambda_coord = 1
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
@@ -255,7 +255,7 @@ class YoloLoss(nn.Module):
             target[..., 2:4] *= tgt_scale
 
             # x and y loss
-            loss_xy += self.lambda_coord * F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], weight = tgt_scale * tgt_scale, reduction = "sum")
+            loss_xy += self.lambda_coord * F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], reduction = "sum")
 
             # width and height loss 
             loss_wh += self.lambda_coord * F.mse_loss(input = output[..., 2:4], target = target[..., 2:4], reduction = "sum") / 2
@@ -305,6 +305,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
         # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
         running_losses = np.zeros(6)
         num_labels_epoch, num_proposals_epoch, num_correct_epoch = 0, 0, 0
+        num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
 
         optimizer.zero_grad()
         for i, (_, imgs, targets) in enumerate(dataloader):
@@ -313,7 +314,6 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             targets.requires_grad = False
 
             losses_batch = np.zeros(6)
-            num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
             
             prediction = model(imgs, targets)
             loss, loss_xy, loss_wh, loss_conf, loss_cls, loss_l2, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets)
@@ -335,6 +335,8 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             num_proposals_batch += num_proposals_minibatch
             num_correct_batch += num_correct_minibatch
 
+            print(num_labels_batch)
+
             if (i + 1) % steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
@@ -353,9 +355,12 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
                 )
 
                 running_losses += losses_batch
+
                 num_labels_epoch += num_labels_batch
                 num_proposals_epoch += num_proposals_batch
                 num_correct_epoch += num_correct_batch
+
+                num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
             
             if bar is not None:
                 bar.update(progress(i + 1, len(dataloader)))
