@@ -110,7 +110,7 @@ class YoloLoss(nn.Module):
         self.ignore_thre = 0.5
         self.lambda_noobj = 0.1
         self.lambda_obj = 10
-        self.lambda_coord = 5
+        self.lambda_coord = 1
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
 
@@ -254,7 +254,7 @@ class YoloLoss(nn.Module):
             target[..., 2:4] *= tgt_scale
 
             # x and y loss
-            loss_xy += self.lambda_coord * F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], reduction = "sum")
+            loss_xy += self.lambda_coord * F.binary_cross_entropy(input = output[..., :2], target = target[..., :2], weight = tgt_scale * tgt_scale, reduction = "sum")
 
             # width and height loss 
             loss_wh += self.lambda_coord * F.mse_loss(input = output[..., 2:4], target = target[..., 2:4], reduction = "sum") / 2
@@ -365,7 +365,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
         recall = num_correct_epoch / num_labels_epoch if num_labels_epoch else 1
         precision = num_correct_epoch / num_proposals_epoch if num_proposals_epoch else 0
         print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
-        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f %, precision: %.2f %"
+        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f %%, precision: %.2f %%"
             % (
                 running_losses[0] / num_batches,
                 running_losses[1] / num_batches,
