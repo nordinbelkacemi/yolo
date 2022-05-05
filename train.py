@@ -192,8 +192,6 @@ class YoloLoss(nn.Module):
             # set mask to zero (ignore) if pred matches truth
             noobj_mask[b] = ~ pred_best_iou
 
-            # conf_mask = 
-
             for ti in range(best_n.shape[0]):
                 if best_n_mask[ti] == 1:
                     i, j = truth_i[ti], truth_j[ti]
@@ -302,7 +300,6 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
     steps = batch_size // minibatch_size
     # training loop
     for epoch in range(num_epochs):
-        # 3 stages of detection: meaning 3 separate losses, where each loss is a tuple of 6 floats: (loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls, recall, precision)
         running_losses = np.zeros(6)
         num_labels_epoch, num_proposals_epoch, num_correct_epoch = 0, 0, 0
         num_labels_batch, num_proposals_batch, num_correct_batch = 0, 0, 0
@@ -369,7 +366,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
         recall = num_correct_epoch / num_labels_epoch if num_labels_epoch else 1
         precision = num_correct_epoch / num_proposals_epoch if num_proposals_epoch else 0
         print("[ Epoch %d/%d ]\t" % (epoch + 1, num_epochs), end = "")
-        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f, precision: %.2f"
+        print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, loss_l2 %.2f, recall %.2f %, precision: %.2f %"
             % (
                 running_losses[0] / num_batches,
                 running_losses[1] / num_batches,
