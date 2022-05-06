@@ -21,7 +21,7 @@ class SquarePad:
         return F.pad(img, padding, 0, 'constant')
 
 class ListDataset(Dataset):
-    def __init__(self, list_path, output_img_size = 608):
+    def __init__(self, list_path, output_img_size = 416):
         self.img_files = [list_path + img for img in glob.glob1(list_path, "*.png")]
         self.label_files = [path.replace('images', 'labels').replace('.png', '.txt').replace('.jpg', '.txt') for path in self.img_files]
         self.img_size = output_img_size
