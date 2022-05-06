@@ -7,3 +7,4 @@ main.py
 *.pt
 demo_train.py
 demo_eval.py
+data.txt

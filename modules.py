@@ -3,6 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 from yolo_layer import YoloLayer
 from util import get_region_boxes
+import numpy as np
 
 
 # ANCHORS = [
@@ -292,16 +293,21 @@ class Neck(nn.Module):
 
 
 class YoloHead(nn.Module):
-    def __init__(self, num_out_channels, num_classes):
+    def __init__(self, num_out_channels, num_classes, anchors, anchor_masks):
         super().__init__()
 
-        # anchors for yolo layers: i.e. if we have 9 anchor boxes, we split them up into 3 arrays of 3 anchor boxes
+        # anchor masks for yolo layers
+
         self.conv1 = ConvBnActivation(128, 256, 3, 1, "leaky")
         self.conv2 = nn.Conv2d(256, num_out_channels, 1)
 
-        self.yolo1 = YoloLayer(anchor_mask = [0, 1, 2], num_classes = num_classes,
-                               anchors = [12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401],
-                               num_anchors = 9, stride = 8)
+        self.yolo1 = YoloLayer(
+            num_classes = num_classes,
+            anchors = np.array(anchors).flatten().tolist(),
+            num_anchors = len(anchors),
+            anchor_mask = anchor_masks[0],
+            stride = 8
+        )
 
         self.conv3 = ConvBnActivation(128, 256, 3, 2, "leaky")
 
@@ -313,9 +319,13 @@ class YoloHead(nn.Module):
         self.conv9 = ConvBnActivation(256, 512, 3, 1, "leaky")
         self.conv10 = nn.Conv2d(512, num_out_channels, 1)
 
-        self.yolo2 = YoloLayer(anchor_mask = [3, 4, 5], num_classes = num_classes,
-                               anchors = [12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401],
-                               num_anchors = 9, stride = 16)
+        self.yolo2 = YoloLayer(
+            num_classes = num_classes,
+            anchors = np.array(anchors).flatten().tolist(),
+            num_anchors = len(anchors),
+            anchor_mask = anchor_masks[1],
+            stride = 16
+        )
 
         self.conv11 = ConvBnActivation(256, 512, 3, 2, "leaky")
 
@@ -327,50 +337,12 @@ class YoloHead(nn.Module):
         self.conv17 = ConvBnActivation(512, 1024, 3, 1, "leaky")
         self.conv18 = nn.Conv2d(1024, num_out_channels, 1)
 
-        self.yolo3 = YoloLayer(anchor_mask = [6, 7, 8], num_classes = num_classes,
-                               anchors = [12, 16, 19, 36, 40, 28, 36, 75, 76, 55, 72, 146, 142, 110, 192, 243, 459, 401],
-                               num_anchors = 9, stride = 32)
-    
-    def yolo_loss(self, yolo_outputs):
-        loss, loss_x, loss_y, loss_w, loss_h, loss_conf, loss_cls = 0, 0, 0, 0, 0, 0, 0
-        for output in yolo_outputs:
-            # predictions
-            pred_x = output[0][0]
-            pred_y = output[1][0]
-            pred_w = output[2][0]
-            pred_h = output[3][0]
-            pred_conf_true = output[4][0]
-            pred_conf_false = output[4][2]
-            pred_cls = output[5][0]
-
-            # targets
-            t_x = output[0][1]
-            t_y = output[1][1]
-            t_w = output[2][1]
-            t_h = output[3][1]
-            t_conf_true = output[4][1]
-            t_conf_false = output[4][3]
-            t_cls = output[5][1]
-
-            # loss calculation
-            loss_x += F.mse_loss(input = pred_x, target = t_x, reduction = "sum")
-            loss_y += F.mse_loss(input = pred_y, target = t_y, reduction = "sum")
-            loss_w += F.mse_loss(input = pred_w, target = t_w, reduction = "sum")
-            loss_h += F.mse_loss(input = pred_h, target = t_h, reduction = "sum")
-            loss_conf += F.binary_cross_entropy(input = pred_conf_true, target = t_conf_true, reduction = "sum") + \
-                10 * F.binary_cross_entropy(input = pred_conf_false, target = t_conf_false, reduction = "mean")
-            loss_cls += F.cross_entropy(input = pred_cls, target = t_cls, reduction = "sum")
-
-        loss += loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls
-
-        return (
-            loss,
-            loss_x,
-            loss_y,
-            loss_w,
-            loss_h,
-            loss_conf,
-            loss_cls
+        self.yolo3 = YoloLayer(
+            num_classes = num_classes,
+            anchors = np.array(anchors).flatten().tolist(),
+            num_anchors = len(anchors),
+            anchor_mask = anchor_masks[2],
+            stride = 32
         )
 
     def forward(self, input1, input2, input3, target = None):
@@ -410,10 +382,13 @@ class YoloHead(nn.Module):
 
 
 class Yolo(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, anchors, anchor_masks, img_size):
         super(Yolo, self).__init__()
+        self.anchors = anchors
+        self.anchor_masks = anchor_masks
+        self.img_size = img_size
 
-        num_out_channels = (5 + num_classes) * 3
+        num_out_channels = (5 + num_classes) * (len(anchors) // 3)
 
         self.downsample1 = DownSample1()
         self.downsample2 = DownSample2()
@@ -423,7 +398,7 @@ class Yolo(nn.Module):
 
         self.neck = Neck()
 
-        self.head = YoloHead(num_out_channels, num_classes)
+        self.head = YoloHead(num_out_channels, num_classes, anchors, anchor_masks)
 
     def forward(self, x, target = None):
         d1 = self.downsample1(x)
