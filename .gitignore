@@ -3,6 +3,7 @@ architechture.pdf
 Finetune/
 .DS_Store
 *.ipynb
+!train.ipynb
 main.py
 *.pt
 demo_train.py

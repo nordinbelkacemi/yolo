@@ -6,6 +6,7 @@ from modules import Yolo
 import numpy as np
 from IPython.display import display
 import math
+import matplotlib.pyplot as plt
 
 
 def bboxes_iou(bboxes_a, bboxes_b, xyxy=True, GIoU=False, DIoU=False, CIoU=False):
@@ -94,25 +95,6 @@ def bboxes_iou(bboxes_a, bboxes_b, xyxy=True, GIoU=False, DIoU=False, CIoU=False
                     alpha = v / (1 - iou + v)
                 return iou - (rho2 / c2 + v * alpha)  # CIoU
     return iou
-
-
-class MeanLoss(nn.Module):
-    def __init__(self, loss_type):
-        super(MeanLoss, self).__init__()
-        self.loss_fn = None
-
-        if loss_type == "bce":
-            self.loss_fn = nn.BCELoss(reduction = "mean")
-        elif loss_type == "mse":
-            self.loss_fn = nn.MSELoss(reduction = "mean")
-        else:
-            raise Exception(f"loss_type {loss_type} is invalid!")
-
-    def forward(self, input, target):
-        if input.numel() != 0:
-            return self.loss_fn(input, target)
-        else:
-            return 0
                 
 
 class YoloLoss(nn.Module):
@@ -126,14 +108,14 @@ class YoloLoss(nn.Module):
 
         self.anchors = all_anchors
         self.anchor_masks = anchor_masks
-        self.ignore_thre = 0.5
+        self.ignore_thres = 0.5
 
         self.lambda_noobj = 1
         self.lambda_obj = 10
         self.lambda_coord = 1
 
-        self.bce_loss = MeanLoss(loss_type = "bce")
-        self.mse_loss = MeanLoss(loss_type = "mse")
+        self.bce_loss = nn.BCELoss(reduction = "sum")
+        self.mse_loss = nn.MSELoss(reduction = "sum")
 
         self.masked_anchors, self.ref_anchors, self.grid_x, self.grid_y, self.anchor_w, self.anchor_h = [], [], [], [], [], []
 
@@ -157,14 +139,12 @@ class YoloLoss(nn.Module):
             self.grid_y.append(grid_y)
             self.anchor_w.append(anchor_w)
             self.anchor_h.append(anchor_h)
-        
-        # print(self.masked_anchors)
 
-    def build_target(self, pred, labels, batch_size, fsize, num_ch, output_id):
+    def build_target(self, pred, labels, batch_size, fsize, num_ch, output_id, plot_conf_heatmap = False):
         # target assignment
 
         tgt_mask = torch.zeros(batch_size, self.num_anchors, fsize, fsize).to(self.device)
-        noobj_mask = torch.ones(batch_size, self.num_anchors, fsize, fsize).to(self.device)
+        conf_mask = torch.ones(batch_size, self.num_anchors, fsize, fsize).to(self.device)
         # obj_mask = torch.zeros(batch_size, self.num_anchors, fsize, fsize).to(self.device)
         # tgt_scale = torch.zeros(batch_size, self.num_anchors, fsize, fsize, 2).to(self.device)
         target = torch.zeros(batch_size, self.num_anchors, fsize, fsize, num_ch).to(self.device)
@@ -181,7 +161,6 @@ class YoloLoss(nn.Module):
         # for loop, num_labels = 2
         num_labels_total = (labels.sum(dim = 2) > 0).sum(dim = 1)  # number of objects
         num_labels = 0
-        num_proposals = (pred[..., 4] > 0.5).sum().item()
         num_correct = 0
         for b in range(batch_size):
             n = int(num_labels_total[b])
@@ -195,8 +174,9 @@ class YoloLoss(nn.Module):
 
             # calculate iou between truth and reference anchors
             anchor_ious_all = bboxes_iou(truth_box.cpu(), self.ref_anchors[output_id], CIoU = True)
+            mask_begin, mask_end = self.anchor_masks[output_id][0], self.anchor_masks[output_id][1] + 1
+            anchor_ious_masked = anchor_ious_all[:, mask_begin:mask_end]
 
-            # temp = bbox_iou(truth_box.cpu(), self.ref_anchors[output_id])
             best_n_all = anchor_ious_all.argmax(dim = 1)
             best_n = best_n_all % int(len(self.anchors) / 3)
             best_n_mask = torch.isin(best_n_all, torch.Tensor(self.anchor_masks[output_id]))
@@ -209,19 +189,21 @@ class YoloLoss(nn.Module):
             truth_box[:n, 0] = truth_x_all[b, :n]
             truth_box[:n, 1] = truth_y_all[b, :n]
 
-            pred_ious = bboxes_iou(pred[b, ..., :4].view(-1, 4), truth_box, xyxy = False)
-            pred_best_iou, _ = pred_ious.max(dim = 1)
-            pred_best_iou = (pred_best_iou > self.ignore_thre)
-            pred_best_iou = pred_best_iou.view(pred[b, ..., :4].shape[:3])
+            # pred_ious = bboxes_iou(pred[b, ..., :4].view(-1, 4), truth_box, xyxy = False)
+            # pred_best_iou, _ = pred_ious.max(dim = 1)
+            # pred_best_iou = (pred_best_iou > self.ignore_thres)
+            # pred_best_iou = pred_best_iou.view(pred[b, ..., :4].shape[:3])
             # set mask to zero (ignore) if pred matches truth
-            noobj_mask[b] = ~ pred_best_iou
+            # noobj_mask[b] = ~ pred_best_iou
 
             for ti in range(best_n.shape[0]):
                 if best_n_mask[ti] == 1:
                     i, j = truth_i[ti], truth_j[ti]
                     a = best_n[ti]
 
-                    noobj_mask[b, a, j, i] = 0
+                    conf_mask[b, anchor_ious_masked[ti] > self.ignore_thres, i, j] = 0
+
+                    conf_mask[b, a, j, i] = 1
                     tgt_mask[b, a, j, i] = 1
                     target[b, a, j, i, 0] = truth_x_all[b, ti] - truth_x_all[b, ti].to(torch.int16).to(torch.float)
                     target[b, a, j, i, 1] = truth_y_all[b, ti] - truth_y_all[b, ti].to(torch.int16).to(torch.float)
@@ -233,21 +215,47 @@ class YoloLoss(nn.Module):
                     target[b, a, j, i, 5 + labels[b, ti, 4].to(torch.int16).cpu().numpy()] = 1
                     # tgt_scale[b, a, j, i, :] = torch.sqrt(2 - truth_w_all[b, ti] * truth_h_all[b, ti] / fsize / fsize)
 
-                    ciou = bboxes_iou(truth_box[ti].unsqueeze(0), pred[b, a, j, i, :4].unsqueeze(0), CIoU = True)
+                    ciou = bboxes_iou(truth_box[ti].unsqueeze(0), pred[b, a, j, i, :4].unsqueeze(0), xyxy = False, CIoU = True)
                     obj_score = pred[b, a, j, i, 4]
                     pred_cls = torch.argmax(pred[b, a, j, i, 5:])
                     t_cls = labels[b, ti, 4]
+                    # print(f"prediction\tbox: {pred[b, a, j, i, :4]}, class: {pred_cls}, obj_score: {obj_score}")
+                    # print(f"target\t{truth_box[ti]}, class: {t_cls}")
+                    # print(f"ciou:{ciou}\tobj_score:{obj_score},pred_cls:{pred_cls},t_cls{t_cls}")
                     if ciou > 0.5 and obj_score > 0.5 and pred_cls == t_cls:
                         num_correct += 1
 
-        return noobj_mask, tgt_mask, target, num_labels, num_proposals, num_correct
+        if plot_conf_heatmap:
+            for img_idx in range(2):
+                fig = plt.figure(figsize=(6, 4))
+                w, h = 2, 2
 
-    def forward(self, xin, labels = None):
+                anchor_targets = target[img_idx]
+                fig.suptitle(f"output id: {output_id}")
+                for i, anchor_target in enumerate(anchor_targets):
+                    confs = anchor_target[..., 4]
+                    img = confs.cpu().detach().numpy()
+                    fig.add_subplot(h, w, i + 1)
+                    plt.imshow(img, vmin = 0, vmax = 1)
+                
+                anchor_preds = pred[img_idx]
+                for i, anchor_pred in enumerate(anchor_preds):
+                    confs = anchor_pred[..., 4]
+                    img = confs.cpu().detach().numpy()
+                    fig.add_subplot(h, w, w + i + 1)
+                    plt.imshow(img, vmin = 0, vmax = 1)
+
+                plt.show()
+
+        return conf_mask, tgt_mask, target, num_labels, num_correct
+
+    def forward(self, xin, labels = None, plot_conf_heatmap = False, eval = False):
         # losses for each stage in a 3 element tensor
         loss_xy = torch.zeros(3)
         loss_wh = torch.zeros(3)
         loss_conf = torch.zeros(3)
         loss_cls = torch.zeros(3)
+        preds = []
         num_labels_total, num_proposals_total, num_correct_total = 0, 0, 0
         for output_id, output in enumerate(xin):
             batch_size = output.shape[0]
@@ -266,29 +274,29 @@ class YoloLoss(nn.Module):
             pred[..., 2] = torch.exp(pred[..., 2]) * self.anchor_w[output_id]
             pred[..., 3] = torch.exp(pred[..., 3]) * self.anchor_h[output_id]
 
-            noobj_mask, tgt_mask, target, num_labels, num_proposals, num_correct = self.build_target(pred, labels, batch_size, fsize, num_ch, output_id)
+            num_proposals = (pred[..., 4] > 0.5).sum().item()
+
+            conf_mask, tgt_mask, target, num_labels, num_correct = self.build_target(
+                pred = pred.detach(),
+                labels = labels.detach(),
+                batch_size = batch_size,
+                fsize = fsize,
+                num_ch = num_ch,
+                output_id = output_id,
+                plot_conf_heatmap = plot_conf_heatmap
+            )
 
             tgt_mask = tgt_mask.type(torch.ByteTensor).bool()
+            conf_mask = conf_mask.type(torch.ByteTensor).bool()
+            
             obj_mask = tgt_mask
-            noobj_mask = noobj_mask.type(torch.ByteTensor).bool()
-
-            # loss calculation
-
-            # output[..., 4] *= noobj_mask
-            # output[..., np.r_[0:4, 5:num_ch]] *= tgt_mask
-            # output[..., 2:4] *= tgt_scale
-
-            # target[..., 4] *= noobj_mask
-            # target[..., np.r_[0:4, 5:num_ch]] *= tgt_mask
-            # target[..., 2:4] *= tgt_scale
+            noobj_mask = conf_mask ^ tgt_mask
 
             # x and y loss
-            # print(f"xy\tinput: {output[..., :2][tgt_mask].cpu().detach()}\ntarget: {target[..., :2][tgt_mask]}")
             loss_xy[output_id] = self.lambda_coord * self.mse_loss(input = output[..., :2][tgt_mask],
                                                                    target = target[..., :2][tgt_mask])
 
             # width and height loss
-            # print(f"wh\tinput: {output[..., 2:4][tgt_mask].cpu().detach()}\ntarget: {target[..., :2][tgt_mask]}")
             loss_wh[output_id] = self.lambda_coord * self.mse_loss(input = output[..., 2:4][tgt_mask],
                                                                    target = target[..., 2:4][tgt_mask])
             
@@ -308,9 +316,15 @@ class YoloLoss(nn.Module):
             num_proposals_total += num_proposals
             num_correct_total += num_correct
 
-        loss = loss_xy.sum() + loss_wh.sum() + loss_conf.sum() + loss_cls.sum()
+            if eval:
+                pred[..., :4] = pred[..., :4] * self.strides[output_id]
+                preds.append(pred.view(batch_size, -1, num_ch))
 
-        return loss, loss_xy.sum(), loss_wh.sum(), loss_conf.sum(), loss_cls.sum(), num_labels_total, num_proposals_total, num_correct_total
+        if eval:
+            return torch.cat(preds, dim = 1)
+        else:
+            loss = loss_xy.sum() + loss_wh.sum() + loss_conf.sum() + loss_cls.sum()
+            return loss, loss_xy.sum(), loss_wh.sum(), loss_conf.sum(), loss_cls.sum(), num_labels_total, num_proposals_total, num_correct_total
 
 
 def init_model(num_classes, anchors, anchor_masks, model_img_size, device):
@@ -356,7 +370,7 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             losses_batch = np.zeros(5)
             
             prediction = model(imgs, targets)
-            loss, loss_xy, loss_wh, loss_conf, loss_cls, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets)
+            loss, loss_xy, loss_wh, loss_conf, loss_cls, num_labels_minibatch, num_proposals_minibatch, num_correct_minibatch = criterion(prediction, targets, plot_conf_heatmap = False)
             loss.backward()
             
             losses_minibatch = np.array([
@@ -377,18 +391,18 @@ def train(model, device, dataloader, num_classes, batch_size, minibatch_size, lr
             if (i + 1) % steps == 0:
                 optimizer.step()
                 optimizer.zero_grad()
-                print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, truth boxes %d, proposals %d, correct %d"
-                    % (
-                        losses_batch[0],
-                        losses_batch[1],
-                        losses_batch[2],
-                        losses_batch[3],
-                        losses_batch[4],
-                        num_labels_batch,
-                        num_proposals_batch,
-                        num_correct_batch
-                    )
-                )
+                # print("Losses: loss %.2f, loss_xy %.2f, loss_wh %.2f, loss_conf %.2f, loss_cls %.2f, truth boxes %d, proposals %d, correct %d"
+                #     % (
+                #         losses_batch[0],
+                #         losses_batch[1],
+                #         losses_batch[2],
+                #         losses_batch[3],
+                #         losses_batch[4],
+                #         num_labels_batch,
+                #         num_proposals_batch,
+                #         num_correct_batch
+                #     )
+                # )
 
                 running_losses += losses_batch
 

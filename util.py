@@ -93,7 +93,6 @@ def non_max_suppression(prediction, conf_thres = 0.5, nms_thres = 0.4):
 
         # unique_labels is a 1 dimensional tensor containing the unique classes predicted:
         unique_labels = detections[:, -1].cpu().unique()
-        print(unique_labels)
         if prediction.is_cuda:
             unique_labels = unique_labels.cuda()
         

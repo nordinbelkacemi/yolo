@@ -22,7 +22,7 @@ class SquarePad:
 
 class ListDataset(Dataset):
 
-    def __init__(self, list_path, anchors, anchor_img_size, model_img_size, tiny = False):
+    def __init__(self, list_path, anchors, anchor_img_size, model_img_size, tiny = False, test = False):
         #---------
         #  Data
         #---------
@@ -39,6 +39,22 @@ class ListDataset(Dataset):
             sel_idx = np.random.choice(len(self.img_files), size = 4, replace = False)
             self.img_files = img_files[sel_idx].tolist()
             self.label_files = label_files[sel_idx].tolist()
+            if test:
+                # for random selection without replacement, conversion to np array is needed
+                img_files = np.array(self.img_files)
+                label_files = np.array(self.label_files)
+                
+                # select 4 elements at random without replacement
+                sel_idx = np.random.choice(len(self.img_files), size = 4, replace = False)
+                self.img_files = img_files[sel_idx].tolist()
+                self.label_files = label_files[sel_idx].tolist()
+                # self.img_files = ['Finetune/test/181.png', 'Finetune/test/syd12_157.png', 'Finetune/test/mont_9.png', 'Finetune/test/m_76.png']
+                # self.label_files = ['Finetune/test/181.txt', 'Finetune/test/syd12_157.txt', 'Finetune/test/mont_9.txt', 'Finetune/test/m_76.txt']
+            else:
+                self.img_files = ['Finetune/train/syd17_44.png', 'Finetune/train/syd4_187.png', 'Finetune/train/m_112.png', 'Finetune/train/b_205.png']
+                self.label_files = ['Finetune/train/syd17_44.txt', 'Finetune/train/syd4_187.txt', 'Finetune/train/m_112.txt', 'Finetune/train/b_205.txt']
+        
+        # print(self.img_files)
         
         self.transform = transforms.Compose([
             SquarePad(),
